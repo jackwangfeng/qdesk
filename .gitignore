@@ -11,3 +11,9 @@
 .DS_Store
 .vscode/
 .idea/
+
+# qdesk runtime artifacts
+/qdesk-runs/
+/qdesk-control.db
+/qdesk-control.db-shm
+/qdesk-control.db-wal

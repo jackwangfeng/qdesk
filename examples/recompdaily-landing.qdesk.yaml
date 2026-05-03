@@ -1,0 +1,15 @@
+name: "RecompDaily — landing → sign in"
+template: ubuntu-chrome
+url: http://host.docker.internal:8888
+
+goal: |
+  On the RecompDaily welcome page, click the red "Get started" button
+  to navigate to the Sign in screen.
+
+expect:
+  - The screen shows the "Sign in" title prominently near the top-left.
+  - There is a back arrow (←) icon at the top-left of the page.
+  - The same RecompDaily red dumbbell logo and "Your daily recomp coach" tagline are still visible.
+
+ttl_seconds: 180
+max_steps: 6
