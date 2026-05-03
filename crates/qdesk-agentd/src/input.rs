@@ -72,13 +72,43 @@ impl InputDriver for XdotoolInput {
                     .await
             }
             Action::Key { keys } => {
-                // xdotool key uses + to combine modifiers, e.g. "ctrl+s"
                 let combo = keys.join("+");
                 self.run(vec!["key".into(), combo]).await
             }
-            other => Err(AgentError::BadRequest(format!(
-                "action not yet implemented: {other:?}"
-            ))),
+            Action::Scroll { x, y, dx: _, dy } => {
+                // xdotool scrolls via button 4 (up) and 5 (down). One click per "tick".
+                let button = if *dy < 0 { "5" } else { "4" };
+                let ticks = dy.unsigned_abs();
+                self.run(vec![
+                    "mousemove".into(),
+                    x.to_string(),
+                    y.to_string(),
+                ])
+                .await?;
+                for _ in 0..ticks.max(1) {
+                    self.run(vec!["click".into(), button.into()]).await?;
+                }
+                Ok(())
+            }
+            Action::Drag { from, to } => {
+                self.run(vec![
+                    "mousemove".into(),
+                    from.x.to_string(),
+                    from.y.to_string(),
+                    "mousedown".into(),
+                    "1".into(),
+                    "mousemove".into(),
+                    to.x.to_string(),
+                    to.y.to_string(),
+                    "mouseup".into(),
+                    "1".into(),
+                ])
+                .await
+            }
+            Action::Wait { ms } => {
+                tokio::time::sleep(std::time::Duration::from_millis(*ms)).await;
+                Ok(())
+            }
         }
     }
 }
@@ -138,6 +168,25 @@ mod more_tests {
     async fn mock_records_key_action() {
         let m = MockInput::default();
         let a = Action::Key { keys: vec!["ctrl".into(), "s".into()] };
+        m.execute(&a).await.unwrap();
+        assert_eq!(m.recorded.lock().await[0], a);
+    }
+
+    #[tokio::test]
+    async fn mock_records_scroll_action() {
+        let m = MockInput::default();
+        let a = Action::Scroll { x: 100, y: 200, dx: 0, dy: -3 };
+        m.execute(&a).await.unwrap();
+        assert_eq!(m.recorded.lock().await[0], a);
+    }
+
+    #[tokio::test]
+    async fn mock_records_drag_action() {
+        let m = MockInput::default();
+        let a = Action::Drag {
+            from: qdesk_protocol::Point { x: 10, y: 20 },
+            to: qdesk_protocol::Point { x: 30, y: 40 },
+        };
         m.execute(&a).await.unwrap();
         assert_eq!(m.recorded.lock().await[0], a);
     }

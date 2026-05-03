@@ -7,6 +7,7 @@ pub enum AgentError {
     Input(String),
     #[error("screen capture failed: {0}")]
     Capture(String),
+    #[allow(dead_code)]
     #[error("invalid request: {0}")]
     BadRequest(String),
 }
