@@ -10,7 +10,9 @@ pub trait ScreenSource: Send + Sync + 'static {
     async fn capture(&self) -> Result<Vec<u8>, AgentError>;
 }
 
-/// Production impl: shells out to `scrot - -` to write PNG to stdout.
+/// Production impl: shells out to `scrot --silent --overwrite /tmp/qdesk_capture.png`,
+/// then reads the file back. Uses a fixed temp-file path — see [`ScrotScreen::capture`]
+/// for concurrency caveats.
 #[derive(Clone)]
 pub struct ScrotScreen {
     pub display: String, // e.g. ":99"
@@ -19,7 +21,9 @@ pub struct ScrotScreen {
 #[async_trait]
 impl ScreenSource for ScrotScreen {
     async fn capture(&self) -> Result<Vec<u8>, AgentError> {
-        let mut child = Command::new("scrot")
+        // NOTE: This writes to a fixed path. Concurrent calls will race on the file.
+        // Acceptable for Phase 0 (single-tenant container). Fix before multi-session support.
+        let child = Command::new("scrot")
             .arg("--silent")
             .arg("--overwrite")
             .arg("/tmp/qdesk_capture.png")
@@ -28,12 +32,17 @@ impl ScreenSource for ScrotScreen {
             .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| AgentError::Capture(format!("spawn scrot: {e}")))?;
-        let status = child
-            .wait()
+        let output = child
+            .wait_with_output()
             .await
             .map_err(|e| AgentError::Capture(format!("wait scrot: {e}")))?;
-        if !status.success() {
-            return Err(AgentError::Capture(format!("scrot exited {status}")));
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(AgentError::Capture(format!(
+                "scrot exited {}: {}",
+                output.status,
+                stderr.trim()
+            )));
         }
         let mut bytes = Vec::new();
         let mut f = tokio::fs::File::open("/tmp/qdesk_capture.png")
@@ -50,28 +59,33 @@ impl ScreenSource for ScrotScreen {
 pub mod test_support {
     use super::*;
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicU32, Ordering};
     use tokio::sync::Mutex;
 
     /// Test impl: returns a fixed PNG byte sequence and counts calls.
     #[derive(Clone, Default)]
     pub struct MockScreen {
         pub bytes: Arc<Mutex<Vec<u8>>>,
-        pub calls: Arc<Mutex<u32>>,
+        pub calls: Arc<AtomicU32>,
     }
 
     impl MockScreen {
         pub fn with_png(bytes: Vec<u8>) -> Self {
             Self {
                 bytes: Arc::new(Mutex::new(bytes)),
-                calls: Arc::new(Mutex::new(0)),
+                calls: Arc::new(AtomicU32::new(0)),
             }
+        }
+
+        pub fn call_count(&self) -> u32 {
+            self.calls.load(Ordering::Relaxed)
         }
     }
 
     #[async_trait]
     impl ScreenSource for MockScreen {
         async fn capture(&self) -> Result<Vec<u8>, AgentError> {
-            *self.calls.lock().await += 1;
+            self.calls.fetch_add(1, Ordering::Relaxed);
             Ok(self.bytes.lock().await.clone())
         }
     }
@@ -87,6 +101,6 @@ mod tests {
         let m = MockScreen::with_png(vec![0x89, 0x50, 0x4E, 0x47]); // PNG magic
         let out = m.capture().await.unwrap();
         assert_eq!(out, vec![0x89, 0x50, 0x4E, 0x47]);
-        assert_eq!(*m.calls.lock().await, 1);
+        assert_eq!(m.call_count(), 1);
     }
 }

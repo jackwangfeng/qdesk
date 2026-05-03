@@ -2,6 +2,7 @@ use axum::{http::StatusCode, response::{IntoResponse, Response}, Json};
 use serde_json::json;
 
 #[derive(Debug, thiserror::Error)]
+#[allow(dead_code)] // Input and BadRequest are wired up in Task 5 (InputDriver)
 pub enum AgentError {
     #[error("input failed: {0}")]
     Input(String),

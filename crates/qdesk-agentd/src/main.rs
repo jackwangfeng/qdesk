@@ -9,6 +9,7 @@ use tracing_subscriber::EnvFilter;
 
 #[derive(Parser)]
 #[command(name = "qdesk-agentd")]
+#[command(about = "qdesk in-sandbox HTTP daemon")]
 struct Cli {
     #[arg(long, default_value = "0.0.0.0:7878")]
     listen: String,
