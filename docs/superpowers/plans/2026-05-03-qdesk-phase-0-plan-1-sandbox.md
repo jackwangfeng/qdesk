@@ -343,13 +343,12 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
-tower = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
 http-body-util = { workspace = true }
-mime = { workspace = true }
+tower = { workspace = true }
 ```
 
 Create `crates/qdesk-agentd/src/error.rs`:
@@ -370,9 +369,9 @@ pub enum AgentError {
 
 impl IntoResponse for AgentError {
     fn into_response(self) -> Response {
-        let status = match self {
+        let status = match &self {
             AgentError::BadRequest(_) => StatusCode::BAD_REQUEST,
-            _ => StatusCode::INTERNAL_SERVER_ERROR,
+            AgentError::Input(_) | AgentError::Capture(_) => StatusCode::INTERNAL_SERVER_ERROR,
         };
         let body = Json(json!({ "error": self.to_string() }));
         (status, body).into_response()
