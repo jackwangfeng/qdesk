@@ -7,7 +7,7 @@ AI-native testing platform — describe tests in natural language, AI agents exe
 ## Quickstart (Phase 0 sandbox)
 
 ```bash
-docker build -t qdesk/ubuntu-chrome:dev images/ubuntu-chrome
+docker build -t qdesk/ubuntu-chrome:dev -f images/ubuntu-chrome/Dockerfile .
 docker run -d -p 7878:7878 --name qdesk-sbx qdesk/ubuntu-chrome:dev
 curl http://localhost:7878/health
 curl http://localhost:7878/screenshot --output /tmp/screen.png
