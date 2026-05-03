@@ -1,34 +1,27 @@
 # syntax=docker/dockerfile:1.7
 
 # ---- Builder stage: compile qdesk-agentd ----
-FROM rust:1.85-slim-bookworm AS builder
+FROM golang:1.25-bookworm AS builder
 WORKDIR /src
 
-# Use Aliyun mirror for apt + USTC mirror for crates.io (CN-friendly, no proxy needed).
 # Override at build time with --build-arg APT_MIRROR=deb.debian.org if you're outside CN.
 ARG APT_MIRROR=mirrors.aliyun.com
-ARG CARGO_REGISTRY_MIRROR=https://mirrors.ustc.edu.cn/crates.io-index
-RUN sed -i "s|deb.debian.org|${APT_MIRROR}|g; s|security.debian.org|${APT_MIRROR}|g" \
-    /etc/apt/sources.list.d/debian.sources
+ARG GOPROXY=https://goproxy.cn,direct
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    pkg-config libssl-dev \
-    && rm -rf /var/lib/apt/lists/*
+ENV CGO_ENABLED=0 \
+    GOPROXY=${GOPROXY}
 
-RUN mkdir -p /usr/local/cargo \
-    && printf '[source.crates-io]\nreplace-with = "ustc"\n\n[source.ustc]\nregistry = "%s"\n' \
-       "${CARGO_REGISTRY_MIRROR}" > /usr/local/cargo/config.toml
+COPY go.mod go.sum ./
+RUN go mod download
 
-COPY Cargo.toml Cargo.lock ./
-COPY crates ./crates
+COPY pkg ./pkg
+COPY internal ./internal
+COPY cmd ./cmd
 
-RUN cargo build --release -p qdesk-agentd
+RUN go build -trimpath -ldflags="-s -w" -o /out/qdesk-agentd ./cmd/qdesk-agentd
 
 # ---- Runtime stage ----
-# NOTE: Plan called for ubuntu:24.04, but on 24.04 `chromium-browser` is a
-# snap redirect that fails in apt-get install. Switched to debian:bookworm-slim
-# which ships native `chromium` and has the same Debian package ecosystem
-# as the rust:slim-bookworm builder.
+# debian:bookworm-slim ships native `chromium` (no snap redirect).
 FROM debian:bookworm-slim
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -43,7 +36,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates dbus-x11 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /src/target/release/qdesk-agentd /usr/local/bin/qdesk-agentd
+COPY --from=builder /out/qdesk-agentd /usr/local/bin/qdesk-agentd
 COPY images/ubuntu-chrome/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 

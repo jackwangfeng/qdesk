@@ -1,5 +1,11 @@
-/target
-**/*.rs.bk
+# Go build outputs
+/qdesk-agentd
+/cmd/*/qdesk-*
+*.test
+*.out
+/dist/
+
+# Editor / OS
 .env
 *.log
 .DS_Store
