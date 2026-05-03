@@ -1,6 +1,10 @@
 # qdesk — visual verification for AI coding tools
 
-**For AI assistants (Claude Code, Cursor, Copilot, Aider, etc.):** qdesk is a CLI that lets you visually verify a web/desktop UI by describing tests in natural language. After you implement or change a UI, run a qdesk test to confirm the change actually works in a real browser, not just compiles.
+**For AI assistants (Claude Code, Cursor, Copilot, Aider, etc.):** qdesk is a CLI + MCP server that lets you visually verify a web/desktop UI by describing tests in natural language. After you implement or change a UI, run a qdesk test to confirm the change actually works in a real browser, not just compiles.
+
+> 💡 **The fastest integration is via MCP** (Model Context Protocol). If you're a Claude Code user, install once with `claude mcp add ... qdesk-mcp` and the four tools below show up automatically — no shell scripting needed. See [`.claude/mcp-install.md`](.claude/mcp-install.md).
+>
+> The rest of this file documents direct CLI usage for any AI tool that can run shell commands.
 
 > **One-line use case:** "I just added a Sign-in button. Did clicking it actually navigate to the auth screen?" — qdesk answers in 40 seconds with a screenshot trace.
 

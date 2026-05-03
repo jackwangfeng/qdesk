@@ -1,0 +1,16 @@
+{
+  "$comment": "Sample MCP configuration for project-scoped Claude Code integration. Copy this to any project that depends on qdesk; Claude Code will auto-load it. Requires qdesk-mcp on PATH.",
+  "mcpServers": {
+    "qdesk": {
+      "command": "qdesk-mcp",
+      "args": [
+        "--control", "http://127.0.0.1:8090",
+        "--llm",     "gemini-2.5-flash"
+      ],
+      "env": {
+        "QDESK_DEV_KEY":  "${QDESK_DEV_KEY}",
+        "GEMINI_API_KEY": "${GEMINI_API_KEY}"
+      }
+    }
+  }
+}

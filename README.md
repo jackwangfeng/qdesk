@@ -2,7 +2,7 @@
 
 **AI-native visual UI testing.** Describe a test in plain English, an AI agent runs it in a sandboxed Chromium, get a pass/fail with a screenshot trace.
 
-> 👉 **AI assistants (Claude Code, Cursor, Copilot, …)** — you can use qdesk as a tool to verify UIs you build. Read **[`SKILL.md`](./SKILL.md)** for the integration guide. Editing this codebase? Read **[`AGENTS.md`](./AGENTS.md)** for project conventions.
+> 👉 **AI assistants (Claude Code, Cursor, Copilot, …)** — qdesk ships an **[MCP server](.claude/mcp-install.md)** so Claude Code etc. can call it as a native tool, plus a [`SKILL.md`](./SKILL.md) for tools that prefer plain shell commands. Editing this codebase? Read **[`AGENTS.md`](./AGENTS.md)** for project conventions.
 
 ## What it does
 
@@ -64,6 +64,7 @@ docker build -t qdesk/ubuntu-chrome:dev -f images/ubuntu-chrome/Dockerfile .
 go build -o /usr/local/bin/qdesk-agentd  ./cmd/qdesk-agentd
 go build -o /usr/local/bin/qdesk-control ./cmd/qdesk-control
 go build -o /usr/local/bin/qdesk         ./cmd/qdesk
+go build -o /usr/local/bin/qdesk-mcp     ./cmd/qdesk-mcp     # MCP server for Claude Code / Cursor
 ```
 
 **3. Run the control plane** (one terminal, leave running):
