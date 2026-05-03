@@ -493,7 +493,6 @@ dependencies = [
  "clap",
  "http",
  "http-body-util",
- "mime",
  "qdesk-protocol",
  "serde",
  "serde_json",

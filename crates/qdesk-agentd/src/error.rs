@@ -13,9 +13,9 @@ pub enum AgentError {
 
 impl IntoResponse for AgentError {
     fn into_response(self) -> Response {
-        let status = match self {
+        let status = match &self {
             AgentError::BadRequest(_) => StatusCode::BAD_REQUEST,
-            _ => StatusCode::INTERNAL_SERVER_ERROR,
+            AgentError::Input(_) | AgentError::Capture(_) => StatusCode::INTERNAL_SERVER_ERROR,
         };
         let body = Json(json!({ "error": self.to_string() }));
         (status, body).into_response()
