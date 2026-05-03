@@ -24,6 +24,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "qdesk-agentd"
+version = "0.1.0"
+
+[[package]]
 name = "qdesk-protocol"
 version = "0.1.0"
 dependencies = [

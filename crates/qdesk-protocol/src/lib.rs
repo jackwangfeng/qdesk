@@ -1,5 +1,11 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub struct Point {
+    pub x: i32,
+    pub y: i32,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Action {
@@ -22,8 +28,8 @@ pub enum Action {
         dy: i32,
     },
     Drag {
-        from: (i32, i32),
-        to: (i32, i32),
+        from: Point,
+        to: Point,
     },
     Wait {
         ms: u64,
@@ -87,8 +93,16 @@ mod tests {
 
     #[test]
     fn drag_action_round_trips() {
-        let a = Action::Drag { from: (1, 2), to: (3, 4) };
-        let back: Action = serde_json::from_str(&serde_json::to_string(&a).unwrap()).unwrap();
+        let a = Action::Drag {
+            from: Point { x: 1, y: 2 },
+            to: Point { x: 3, y: 4 },
+        };
+        let json = serde_json::to_string(&a).unwrap();
+        assert_eq!(
+            json,
+            r#"{"type":"drag","from":{"x":1,"y":2},"to":{"x":3,"y":4}}"#
+        );
+        let back: Action = serde_json::from_str(&json).unwrap();
         assert_eq!(back, a);
     }
 }
