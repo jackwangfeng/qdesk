@@ -1,4 +1,5 @@
 mod error;
+mod input;
 mod screen;
 mod server;
 
@@ -26,6 +27,7 @@ async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     let state = AppState {
         screen: Arc::new(screen::ScrotScreen { display: cli.display.clone() }),
+        input: Arc::new(input::XdotoolInput { display: cli.display.clone() }),
     };
     let app = server::router(state);
     let listener = tokio::net::TcpListener::bind(&cli.listen).await?;
