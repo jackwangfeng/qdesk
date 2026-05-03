@@ -67,6 +67,15 @@ impl InputDriver for XdotoolInput {
                 ])
                 .await
             }
+            Action::Type { text } => {
+                self.run(vec!["type".into(), "--delay".into(), "10".into(), text.clone()])
+                    .await
+            }
+            Action::Key { keys } => {
+                // xdotool key uses + to combine modifiers, e.g. "ctrl+s"
+                let combo = keys.join("+");
+                self.run(vec!["key".into(), combo]).await
+            }
             other => Err(AgentError::BadRequest(format!(
                 "action not yet implemented: {other:?}"
             ))),
@@ -107,5 +116,29 @@ mod tests {
         let recorded = m.recorded.lock().await;
         assert_eq!(recorded.len(), 1);
         assert_eq!(recorded[0], act);
+    }
+}
+
+#[cfg(test)]
+mod more_tests {
+    use super::test_support::*;
+    use super::*;
+
+    #[tokio::test]
+    async fn mock_records_type_action() {
+        let m = MockInput::default();
+        m.execute(&Action::Type { text: "hello".into() }).await.unwrap();
+        assert_eq!(
+            m.recorded.lock().await[0],
+            Action::Type { text: "hello".into() }
+        );
+    }
+
+    #[tokio::test]
+    async fn mock_records_key_action() {
+        let m = MockInput::default();
+        let a = Action::Key { keys: vec!["ctrl".into(), "s".into()] };
+        m.execute(&a).await.unwrap();
+        assert_eq!(m.recorded.lock().await[0], a);
     }
 }
