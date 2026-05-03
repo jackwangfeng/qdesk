@@ -16,6 +16,7 @@ import (
 
 	"github.com/jeffwang/qdesk/internal/llm"
 	"github.com/jeffwang/qdesk/internal/runner"
+	"github.com/jeffwang/qdesk/pkg/version"
 )
 
 func main() {
@@ -29,7 +30,7 @@ func main() {
 	case "run":
 		os.Exit(cmdRun(args))
 	case "version":
-		fmt.Println("qdesk 0.1.0")
+		fmt.Println("qdesk", version.String())
 	case "help", "-h", "--help":
 		usage()
 	default:

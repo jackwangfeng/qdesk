@@ -8,10 +8,19 @@ import (
 	"net/http"
 
 	"github.com/jeffwang/qdesk/pkg/protocol"
+	"github.com/jeffwang/qdesk/pkg/version"
 )
 
-// Version is reported by /health. Override at link time with -ldflags.
-var Version = "0.1.0"
+func init() {
+	Version = version.Version
+}
+
+// Version reported by /health. Sourced from pkg/version so the whole
+// project shares one number set at link time via -ldflags.
+//
+// Reassigned in init() instead of imported as a const so callers can still
+// override it for tests if needed.
+var Version = "dev"
 
 // AppState is the dependency container shared by all handlers.
 type AppState struct {

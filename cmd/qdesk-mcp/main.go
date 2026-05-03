@@ -38,13 +38,15 @@ import (
 	"github.com/jeffwang/qdesk/internal/runner"
 	"github.com/jeffwang/qdesk/pkg/client"
 	"github.com/jeffwang/qdesk/pkg/protocol"
+	"github.com/jeffwang/qdesk/pkg/version"
 )
 
 const (
 	protocolVersion = "2024-11-05"
 	serverName      = "qdesk-mcp"
-	serverVersion   = "0.1.0"
 )
+
+func serverVersion() string { return version.String() }
 
 // ---------- JSON-RPC envelopes ----------
 
@@ -166,7 +168,7 @@ func (s *server) handle(ctx context.Context, req *rpcRequest) *rpcResponse {
 		resp.Result = map[string]any{
 			"protocolVersion": protocolVersion,
 			"capabilities":    map[string]any{"tools": map[string]any{}},
-			"serverInfo":      map[string]any{"name": serverName, "version": serverVersion},
+			"serverInfo":      map[string]any{"name": serverName, "version": serverVersion()},
 		}
 	case "tools/list":
 		resp.Result = map[string]any{"tools": s.tools()}
