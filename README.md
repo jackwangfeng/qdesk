@@ -44,14 +44,25 @@ Or run the smoke test:
 ./scripts/smoke-sandbox.sh
 ```
 
+## Local development
+
+```bash
+go test ./...                          # run all tests
+go build ./cmd/qdesk-agentd            # build agentd binary
+go run ./cmd/qdesk-agentd --listen 127.0.0.1:7878 --display :0   # run against your real X (Linux only)
+```
+
+Zero third-party Go dependencies — everything is stdlib (`net/http`, `encoding/json`, `log/slog`, `os/exec`, `sync/atomic`).
+
 ## Layout
 
-- `crates/qdesk-protocol/` — wire types shared across host & sandbox
-- `crates/qdesk-agentd/`   — in-sandbox HTTP daemon (binary)
-- `images/ubuntu-chrome/`  — Dockerfile + entrypoint for default sandbox image
-- `scripts/`               — operator scripts (smoke test, etc.)
-- `docs/superpowers/specs/` — design documents
-- `docs/superpowers/plans/` — implementation plans
+- `pkg/protocol/`              — wire types (Action, ActionResult, HealthResponse) — public, importable by future control plane / runner
+- `internal/agentd/`           — in-sandbox HTTP daemon (ScreenSource, InputDriver, AppState, NewRouter)
+- `cmd/qdesk-agentd/`          — agentd binary entrypoint
+- `images/ubuntu-chrome/`      — Dockerfile + entrypoint for default sandbox image
+- `scripts/`                   — operator scripts (smoke test, etc.)
+- `docs/superpowers/specs/`    — design documents
+- `docs/superpowers/plans/`    — implementation plans
 
 ## License
 
