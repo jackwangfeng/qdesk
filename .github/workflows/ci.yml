@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel older runs on the same PR / branch.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  # ── Fast lint + unit test, runs on every push and PR ────────────────
+  lint-test:
+    name: Lint + unit test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: gofmt check
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::These files need 'gofmt -w': $unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test -race -count=1 ./...
+
+      - name: go build (sanity, host platform)
+        run: |
+          for cmd in qdesk-agentd qdesk-control qdesk qdesk-mcp; do
+            go build -trimpath -o /tmp/$cmd ./cmd/$cmd
+          done
+          ls -la /tmp/qdesk*
+
+  # ── End-to-end sandbox smoke, only on main pushes (slow) ────────────
+  smoke:
+    name: Sandbox smoke (main only)
+    needs: lint-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build sandbox image (no CN mirror — uses default Debian apt)
+        run: |
+          docker build \
+            --build-arg APT_MIRROR=deb.debian.org \
+            --build-arg GOPROXY=https://proxy.golang.org,direct \
+            --build-arg VERSION=ci-${{ github.sha }} \
+            --build-arg COMMIT=$(git rev-parse --short HEAD) \
+            -t qdesk/ubuntu-chrome:dev \
+            -f images/ubuntu-chrome/Dockerfile .
+
+      - name: Smoke test
+        run: IMAGE=qdesk/ubuntu-chrome:dev ./scripts/smoke-sandbox.sh
