@@ -11,6 +11,12 @@ ARG GOPROXY=https://goproxy.cn,direct
 ENV CGO_ENABLED=0 \
     GOPROXY=${GOPROXY}
 
+# Version + commit injection. Defaults to "dev" so plain `docker build`
+# (without --build-arg) still works for development; release pipelines
+# pass the real values.
+ARG VERSION=dev
+ARG COMMIT=unknown
+
 COPY go.mod go.sum ./
 RUN go mod download
 
@@ -18,7 +24,11 @@ COPY pkg ./pkg
 COPY internal ./internal
 COPY cmd ./cmd
 
-RUN go build -trimpath -ldflags="-s -w" -o /out/qdesk-agentd ./cmd/qdesk-agentd
+RUN go build -trimpath \
+    -ldflags="-s -w \
+        -X github.com/jeffwang/qdesk/pkg/version.Version=${VERSION} \
+        -X github.com/jeffwang/qdesk/pkg/version.Commit=${COMMIT}" \
+    -o /out/qdesk-agentd ./cmd/qdesk-agentd
 
 # ---- Runtime stage ----
 # debian:bookworm-slim ships native `chromium` (no snap redirect).

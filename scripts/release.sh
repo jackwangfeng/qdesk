@@ -147,6 +147,8 @@ step "4/9 build sandbox docker image"
 docker build \
   --build-arg APT_MIRROR="${APT_MIRROR:-mirrors.aliyun.com}" \
   --build-arg GOPROXY="${GOPROXY_BUILD:-https://goproxy.cn,direct}" \
+  --build-arg VERSION="$VERSION" \
+  --build-arg COMMIT="$(git rev-parse --short HEAD)" \
   -t "$SANDBOX_IMAGE" \
   -t "$SANDBOX_IMAGE_LATEST" \
   -t "qdesk/ubuntu-chrome:dev" \

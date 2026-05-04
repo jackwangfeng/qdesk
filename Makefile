@@ -92,6 +92,8 @@ image: ## Build the qdesk/ubuntu-chrome sandbox docker image.
 	$(DOCKER) build \
 	  --build-arg APT_MIRROR=$(APT_MIRROR) \
 	  --build-arg GOPROXY=$(GOPROXY_BUILD) \
+	  --build-arg VERSION=$(VERSION) \
+	  --build-arg COMMIT=$(COMMIT) \
 	  -t $(SANDBOX_IMAGE) \
 	  -f images/ubuntu-chrome/Dockerfile .
 
