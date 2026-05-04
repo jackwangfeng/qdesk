@@ -1,168 +1,207 @@
 # qdesk
 
-**AI visual testing for any web app — including production builds, canvas-rendered UIs, and apps you can't instrument.**
+**Open-source AI agent desktop sandbox.**
 
-Describe a test in plain English, an AI agent runs it inside a sandboxed Linux + Chromium container, get pass/fail with a screenshot trace and AI-written failure diagnosis.
+Give any AI agent a clean Linux + Chromium environment over HTTP. Take screenshots, send clicks/keys, install apps, watch the screen. Self-hostable, MCP-native, ~$0.005 per agent action with a vision LLM.
 
-> 👉 **AI assistants (Claude Code, Cursor, Copilot, …)** — qdesk ships an **[MCP server](.claude/mcp-install.md)**. Plus a [`SKILL.md`](./SKILL.md) for tools that prefer plain shell commands. Editing this codebase? Read **[`AGENTS.md`](./AGENTS.md)**.
+Use it for **testing, web automation, RPA, agent training, demos, scraping, computer-use evaluation** — anywhere an AI needs a real computer to drive.
 
----
-
-## Why qdesk vs other AI testing tools
-
-There's a healthy ecosystem of AI testing tools now. **qdesk is not trying to replace any of them — it covers the cases they can't.**
-
-| | **qdesk** | [flutter-skill](https://github.com/ai-dashboad/flutter-skill) | Playwright + AI plugins |
-|---|---|---|---|
-| **Approach** | Real Chromium in Docker, screenshot + vision LLM | Dart VM Service (in-process Flutter) | DOM selectors + LLM grounding |
-| **Speed per action** | 100-500 ms | **1-2 ms** ⭐ | 50-100 ms |
-| **Cost per action** | ~$0.0005 (LLM screenshot) | ~free (no LLM call) ⭐ | varies |
-| **Works on production builds** | **✅ yes** ⭐ | ❌ needs Dart VM Service (debug/profile only) | ✅ yes |
-| **Works on non-Flutter apps** | **✅ any web app** ⭐ | ❌ Flutter-only | ✅ web only |
-| **Works on canvas-rendered UIs** | **✅ vision sees pixels** ⭐ | ⚠️ widget tree only — misses CustomPainter content | ❌ canvas is a black box |
-| **Sandbox isolation** | **✅ Docker** ⭐ | ❌ attaches to running app | ❌ same machine |
-| **Setup** | 5 min (build image once) | <1 min ⭐ | <1 min |
-| **Cross-platform** | Linux + Web today; Android/iOS planned | 10 platforms (Flutter, RN, native, web, …) ⭐ | Web (Chrome/FF/Safari) |
-| **Best for** | Canvas apps, production builds, any-web-app, AI sandboxes | Day-to-day Flutter dev | DOM-heavy SPAs |
-
-**TL;DR — pick the right tool for the job:**
-
-- 🎨 **Canvas-rendered apps** (Figma, Excalidraw, Miro, custom Flutter painters) → **qdesk**
-- 📱 **Day-to-day Flutter dev iteration** (debug builds) → **flutter-skill** (faster, cheaper, more tools)
-- 🚀 **Production / release-build verification** (no Dart VM available) → **qdesk**
-- 🌐 **Any non-Flutter web app** (React / Vue / Svelte / vanilla) → **qdesk** or **Playwright + LLM**
-- 🖱 **DOM-heavy traditional web apps** → **Playwright** (fastest, cheapest, deterministic)
-- 🤖 **Generic "AI agent computer-use" sandbox** (open URLs, screenshot, click, beyond testing) → **qdesk**
-
-The healthy stack: **Playwright** for fast DOM CI + **flutter-skill** for Flutter dev loops + **qdesk** for the visual / production / canvas / any-app cases the others can't see.
+> 👉 **AI assistants (Claude Code, Cursor, Aider, …)** — qdesk ships an **[MCP server](.claude/mcp-install.md)** with 4 tools you can call directly. See [`SKILL.md`](./SKILL.md). Editing this codebase? Read **[`AGENTS.md`](./AGENTS.md)**.
 
 ---
 
-## What it does
+## What it gives you
 
+```
+┌──────────────────────────────────────────────────────────┐
+│  AI agent (Claude / Gemini / GPT / your own loop)         │
+└──────────────────────┬───────────────────────────────────┘
+                       │ HTTPS — JSON actions
+                       ▼
+┌──────────────────────────────────────────────────────────┐
+│  qdesk-control  (multi-session, SQLite, bearer auth)      │
+│      └─ POST /v1/sessions  → spin up a sandbox            │
+│      └─ GET  .../screenshot                                │
+│      └─ POST .../actions  {click,type,key,scroll,drag}    │
+└──────────────────────┬───────────────────────────────────┘
+                       │ Docker
+                       ▼
+┌──────────────────────────────────────────────────────────┐
+│  qdesk/ubuntu-chrome:dev                                   │
+│  ┌────────────────────────────────────────────────────┐  │
+│  │ Xvfb (virtual display)                              │  │
+│  │ xfwm4 (window manager)                              │  │
+│  │ Chromium                                             │  │
+│  │ qdesk-agentd (HTTP daemon, /screenshot /actions)    │  │
+│  └────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────┘
+```
+
+A single sandbox boots in **~1 second** (Docker), responds to HTTP, returns
+real PNG screenshots and accepts real input events. **No app instrumentation
+needed** — the sandbox doesn't know or care what's running inside.
+
+---
+
+## Use cases
+
+qdesk gives you a **primitive**: an AI-controllable Linux desktop. What you
+build on top is up to you.
+
+### 🤖 1. AI agent computer use
+Give Claude / Gemini / your own agent a real computer to drive. Open URLs,
+click, type, observe, decide. Same shape as Anthropic Computer Use, but
+**you control the computer** and **it's open source**.
+
+### 🧪 2. Visual UI testing (especially production builds + canvas)
+Describe a test in English; an AI agent verifies it. Works on **any rendered
+UI** — production builds, canvas-rendered apps (Figma, Excalidraw, custom
+Flutter painters), apps you can't instrument. Companion to dedicated tools
+like [Maestro](https://maestro.dev) (mobile dev iteration) and
+[flutter-skill](https://github.com/ai-dashboad/flutter-skill) (Flutter Dart-VM
+testing) which are faster on their home turf.
+
+```yaml
+# tests/login.qdesk.yaml
+name: "Landing → sign in"
+url: http://host.docker.internal:8888
+goal: Click "Get started" on the welcome page.
+expect:
+  - The screen shows "Sign in" near the top-left.
+```
 ```bash
 $ qdesk run tests/login.qdesk.yaml
-▶ qdesk run tests/login.qdesk.yaml
 ✅ PASS  (3 step(s), 41s, ~$0.005)
-  ✓ The screen shows "Sign in" prominently near the top-left
-  ✓ A back arrow icon is visible at the top-left
-  ✓ The brand logo is still visible
 📄 report: file:///.../report.html
 ```
 
-A `tests/login.qdesk.yaml` looks like:
+### 🌐 3. AI-driven web automation / scraping
+Site has anti-bot measures? Or just complex JS? Drive a real Chromium with
+an LLM choosing each action. Slower than Playwright but **handles cases
+DOM-based scrapers can't** (canvas, dynamic flows, captchas you have to
+visually decide on).
 
-```yaml
-name: "Landing → sign in"
-url: http://host.docker.internal:8888
-goal: |
-  On the welcome page, click the red "Get started" button to go to Sign in.
-expect:
-  - The screen shows "Sign in" near the top-left.
-  - A back arrow (←) is visible at the top-left.
-```
+### 🦾 4. RPA / driving apps that have no API
+Internal Linux desktop tools, legacy ERP web frontends, anything that's
+"only a UI." `apt install` it inside the sandbox image, then have the AI
+drive it.
 
-## How it works
+### 🎬 5. Demos / tutorials
+"Show me how to use Photoshop / Figma / our internal admin panel." AI
+performs the steps in the sandbox while recording — generate animated
+guides without manual screen-recording.
 
-```
-qdesk run X.yaml
-  │
-  ├─ qdesk-control HTTP API (multi-session, SQLite, bearer auth)
-  │     └─ Docker → qdesk/ubuntu-chrome:dev sandbox
-  │           └─ qdesk-agentd (Xvfb + Chromium + xdotool + scrot)
-  │
-  └─ runner: loop { screenshot → LLM (Gemini/Claude/...) → action → done? }
-       └─ HTML report + trace.json
-```
+### 📊 6. Agent training data / eval
+Record trajectories (screenshots + actions + outcomes) of agents
+performing tasks. Use as supervised fine-tuning data or as eval harness.
 
-**Key properties**
-- 🔍 **Vision-based** — sees what the user sees, including canvas pixels and CustomPainter content
-- 🐳 **Sandboxed** — clean Linux + Chromium per session, no app instrumentation needed
-- 📦 **Production-build friendly** — works on any rendered UI, no debug protocols required
-- 🌐 **App-agnostic** — Flutter Web, React, Vue, vanilla, internal tools, third-party SaaS
-- 🤖 **Multi-model** — Gemini default (cheap), Claude/GPT-4o pluggable
-- 📊 **HTML report** — every screenshot + agent reasoning + AI failure diagnosis
-- 💰 **~$0.005 per test** with Gemini 2.5 Flash
-- 🔌 **SDK-first** — HTTP API + Go client + MCP server; CLI is just one consumer
-- 🪶 **Pure-Go runtime** (no CGO), single binary per component
+### 🔍 7. Computer-use eval / red-teaming
+Test how a frontier model handles unusual UIs, multi-step flows, or
+adversarial pages. Sandbox is disposable — agent can't escape into your
+host.
 
-## When you should NOT use qdesk
+---
 
-Honest list of where other tools win:
+## How it compares (honest table)
 
-- ⚡ **Need 1-2 ms per action** for Flutter dev hot loops → use [flutter-skill](https://github.com/ai-dashboad/flutter-skill)
-- 🧪 **DOM-precise assertions** ("element has class X") → use Playwright
-- 🌍 **Cross-browser testing** (Firefox / Safari / Edge) → use Playwright
-- 📊 **1000+ tests in CI per PR** → cost adds up; mix qdesk into the slow lane only
-- 🔌 **Network mocking / interception** → Playwright
-- 📱 **Day-to-day Flutter dev iteration on debug builds** → flutter-skill is the right tool
+There's a healthy 2026 ecosystem. **qdesk doesn't try to win every cell.**
 
-qdesk and these tools **complement each other** — most production teams should run more than one.
+| | qdesk | [Browserbase](https://browserbase.com) | [E2B](https://e2b.dev) | [Maestro](https://maestro.dev) | [flutter-skill](https://github.com/ai-dashboad/flutter-skill) | [Playwright](https://playwright.dev) |
+|---|---|---|---|---|---|---|
+| **Scope** | Full Linux desktop | Browser only | Code execution + light desktop | Mobile + web testing | Flutter dev (Dart VM) | Web DOM automation |
+| **Open source** | ✅ Apache 2.0 | ❌ SaaS | Open-core | ✅ | ✅ | ✅ |
+| **Self-hostable** | ✅ | ❌ | Partial | ✅ | ✅ | ✅ |
+| **MCP server** | ✅ built-in | Via partners | ✅ | ✅ | ✅ | Via plugins |
+| **Funded** | ❌ open-source side project | $66M | $20M+ | $$$ | community | F500-funded |
+| **Best at** | Self-hosted desktop sandbox | Managed browser sandbox | Cloud code+browser | Mobile testing | Flutter dev iteration | Web DOM CI |
+| **Worst at** | Speed (LLM screenshot loop) | Anything outside browser | Pure desktop apps | Canvas-only assertions | Production builds | Canvas content |
+
+**TL;DR:** qdesk is the "open-source self-hosted desktop sandbox" cell. If
+you want managed cloud and only browser → Browserbase. If you want
+mobile-specific testing → Maestro. If you want fast Flutter dev loops →
+flutter-skill. If you want a Linux computer your AI can drive, that you
+control end-to-end, that's open source — qdesk.
+
+---
 
 ## Quickstart
 
-**1. Build the sandbox image** (one time, ~1 min on warm cache):
+**1. Build the sandbox image** (~1 min on warm cache):
 
 ```bash
 docker build -t qdesk/ubuntu-chrome:dev -f images/ubuntu-chrome/Dockerfile .
 ```
 
-**2. Build the binaries:**
+**2. Build / install binaries:**
 
 ```bash
-go build -o /usr/local/bin/qdesk-agentd  ./cmd/qdesk-agentd
-go build -o /usr/local/bin/qdesk-control ./cmd/qdesk-control
-go build -o /usr/local/bin/qdesk         ./cmd/qdesk
-go build -o /usr/local/bin/qdesk-mcp     ./cmd/qdesk-mcp     # MCP server for Claude Code / Cursor
-```
-
-Or one-line install (downloads the latest GitHub release):
-
-```bash
+make build && sudo make install
+# Or one-line via the GitHub release:
 curl -fsSL https://raw.githubusercontent.com/jackwangfeng/qdesk/main/scripts/install.sh | bash
 ```
 
-**3. Run the control plane** (one terminal, leave running):
+Binaries:
+- `qdesk-agentd` — runs **inside** each sandbox (HTTP daemon)
+- `qdesk-control` — multi-session control plane
+- `qdesk` — CLI runner (testing use case)
+- `qdesk-mcp` — MCP server for AI assistants
+
+**3. Run the control plane** (one terminal):
 
 ```bash
-export QDESK_DEV_KEY=devkeysecret
-qdesk-control --listen 127.0.0.1:8090 --dev-key $QDESK_DEV_KEY \
+export QDESK_DEV_KEY=$(openssl rand -hex 16)
+qdesk-control --listen 127.0.0.1:8090 --dev-key "$QDESK_DEV_KEY" \
               --image qdesk/ubuntu-chrome:dev
 ```
 
-**4. Run a test** (any terminal):
+**4. Drive a sandbox via plain HTTP** (no LLM):
+
+```bash
+# Spin up a session
+SESSION=$(curl -s -X POST http://127.0.0.1:8090/v1/sessions \
+    -H "Authorization: Bearer $QDESK_DEV_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{"open_url":"https://example.com"}' | jq -r .session_id)
+
+# Take a screenshot
+curl http://127.0.0.1:8090/v1/sessions/$SESSION/screenshot \
+    -H "Authorization: Bearer $QDESK_DEV_KEY" \
+    --output /tmp/screen.png
+
+# Click somewhere
+curl -X POST http://127.0.0.1:8090/v1/sessions/$SESSION/actions \
+    -H "Authorization: Bearer $QDESK_DEV_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{"type":"click","x":500,"y":300}'
+
+# Tear down
+curl -X DELETE http://127.0.0.1:8090/v1/sessions/$SESSION \
+    -H "Authorization: Bearer $QDESK_DEV_KEY"
+```
+
+**5. Or: use it as an AI testing tool with the bundled runner:**
 
 ```bash
 export GEMINI_API_KEY=AIza...
-export QDESK_DEV_KEY=devkeysecret
 qdesk run --control http://127.0.0.1:8090 examples/recompdaily-landing.qdesk.yaml
 ```
 
-The example assumes a static server on port 8888 inside `host.docker.internal`.
-Substitute any URL your app exposes.
-
-## Direct sandbox usage (no LLM)
-
-If you just want a programmable Chromium without AI:
+**6. Or: register with Claude Code via MCP:**
 
 ```bash
-docker run -d --rm --name qdesk-sbx -p 7878:7878 qdesk/ubuntu-chrome:dev
-
-curl http://localhost:7878/health
-curl http://localhost:7878/screenshot --output /tmp/screen.png
-curl -X POST http://localhost:7878/actions \
-    -H 'content-type: application/json' \
-    -d '{"type":"click","x":100,"y":200}'
-
-docker stop qdesk-sbx
+claude mcp add --transport stdio qdesk -- qdesk-mcp \
+    --control http://127.0.0.1:8090 \
+    --api-key "$QDESK_DEV_KEY" \
+    --gemini-key "$GEMINI_API_KEY"
 ```
 
-Or:
-```bash
-./scripts/smoke-sandbox.sh
-```
+After this, Claude Code can call `qdesk_screenshot`, `qdesk_quick_test`,
+etc. naturally inside a project.
 
-This makes qdesk usable as a **generic AI-agent sandbox** for non-testing use cases too — give an LLM a fresh Chromium it can drive over HTTP.
+See [`docs/TEAM_QUICKSTART.md`](docs/TEAM_QUICKSTART.md) for the full
+team-onboarding flow (5 minutes).
+
+---
 
 ## Layout
 
@@ -171,12 +210,12 @@ pkg/protocol/         wire types — Action, Session, ActionResult, ...
 pkg/client/           Go SDK for qdesk-control HTTP API
 internal/agentd/      in-sandbox HTTP daemon (Xvfb-driven)
 internal/control/     control plane: sessions, runtime, auth, proxy
-internal/llm/         VisionAgent backends (gemini.go is the default)
-internal/runner/      .qdesk parser, agent loop, HTML report
+internal/llm/         VisionAgent backends (Gemini default; Claude/GPT pluggable)
+internal/runner/      .qdesk parser, agent loop, HTML report (testing use case)
 cmd/qdesk-agentd/     binary that runs INSIDE each sandbox
 cmd/qdesk-control/    control plane binary (one per host / cluster)
-cmd/qdesk/            CLI: `qdesk run …`
-cmd/qdesk-mcp/        MCP server for Claude Code / Cursor / Aider
+cmd/qdesk/            CLI runner for testing
+cmd/qdesk-mcp/        MCP server for AI assistants
 images/ubuntu-chrome/ Dockerfile + entrypoint for default sandbox
 docs/superpowers/     design specs and implementation plans
 docs/TEAM_QUICKSTART.md  team onboarding (5 min)
@@ -188,29 +227,34 @@ AGENTS.md             conventions for AI assistants editing qdesk itself
 ## Local development
 
 ```bash
-go test ./...                              # unit tests (13 currently)
-./scripts/smoke-sandbox.sh                 # end-to-end sandbox smoke
-make help                                  # all targets
+make help                    # all targets
+make build test smoke        # build + unit tests + e2e smoke
+go test ./...                # unit tests only
 ```
 
-Zero third-party Go dependencies for `qdesk-agentd` (stdlib only). Control
-plane adds `modernc.org/sqlite` (pure Go) and `gopkg.in/yaml.v3`.
+Pure-Go runtime; only third-party deps are `modernc.org/sqlite` (pure Go)
+and `gopkg.in/yaml.v3`.
 
 ## Status
 
-- ✅ Phase 0 — sandbox + control plane + Gemini agent loop + HTML report + MCP. Verified end-to-end on a real Flutter Web app.
-- 🔄 Phase 1 — Replay mode + self-heal traces, web UI for the control plane, GitHub Action template.
-- 🔮 Phase 2 — Android emulator template, macOS host with iOS simulator, Firecracker microVM, snapshots.
-- 🔮 Phase 3 — Multi-tenant cloud SKU.
+- ✅ **v0.1** — sandbox + control plane + Gemini agent loop + HTML report + MCP server. Verified end-to-end on a real Flutter Web app.
+- 🔄 **v0.2 (planned)** — replay mode + self-heal traces, web UI for the control plane, browser cookies/auth persistence, GPU sandbox template.
+- 🔮 **v0.3+ (planned)** — Android emulator template, macOS/iOS simulator template (positioned as agent sandboxes, not testing-only), Firecracker microVM, agent trajectory recording for training data.
 
 ## Related projects
 
-These solve adjacent problems and are worth knowing about:
+Adjacent tools, all worth knowing:
 
-- **[flutter-skill](https://github.com/ai-dashboad/flutter-skill)** — in-process Flutter testing via Dart VM Service. **Faster than qdesk for Flutter dev loops** but requires the app to expose VM Service (debug/profile builds). Best for daily Flutter iteration.
-- **[Playwright](https://playwright.dev/)** — DOM-based browser automation, gold standard for traditional web E2E. Add LLM grounding plugins for AI-driven tests in DOM apps.
-- **[Browserbase](https://browserbase.com/)** / **[E2B](https://e2b.dev/)** — managed cloud sandboxes for AI agents (browser-only / general). qdesk's control plane is similar in shape but open source.
-- **[Anthropic Computer Use](https://docs.anthropic.com/claude/docs/computer-use)** — Claude's built-in screen+mouse capability. qdesk provides the "computer" that Computer Use drives.
+- **Managed AI sandbox SaaS** — [Browserbase](https://browserbase.com) (browser only), [E2B](https://e2b.dev) (code+light desktop), [Anchor Browser](https://anchorbrowser.io), [Hyperbrowser](https://hyperbrowser.ai)
+- **Testing — mobile** — [Maestro](https://maestro.dev) (mobile + web, MCP-native, gold standard)
+- **Testing — Flutter dev iteration** — [flutter-skill](https://github.com/ai-dashboad/flutter-skill) (Dart VM in-process)
+- **Testing — web DOM** — [Playwright](https://playwright.dev) (DOM automation), [Cypress](https://cypress.io)
+- **AI agent computer use** — [Anthropic Computer Use](https://docs.anthropic.com/claude/docs/computer-use) (agent side; qdesk provides the computer)
+- **Browser-as-agent libraries** — [Browser Use](https://github.com/browser-use/browser-use), [Stagehand](https://github.com/browserbase/stagehand), [Skyvern](https://github.com/Skyvern-AI/skyvern)
+
+If you want managed, polished, well-funded — pick one of those for your
+specific need. If you want **open source, self-hosted, full-Linux, that
+you can fork and shape** — that's qdesk.
 
 ## License
 
