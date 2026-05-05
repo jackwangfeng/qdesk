@@ -107,7 +107,7 @@ type AXTreeRequest struct {
 
 // AXNode is one element in the returned tree (flattened, depth-first).
 type AXNode struct {
-	Path        string `json:"path"`        // opaque ID for axClick
+	Path        string `json:"path"` // opaque ID for axClick
 	Role        string `json:"role"`
 	Title       string `json:"title,omitempty"`
 	Value       string `json:"value,omitempty"`
@@ -139,12 +139,12 @@ type OK struct {
 // Error codes surfaced to the LLM. Stable strings — do not rename without
 // updating the README + tool descriptions.
 const (
-	CodeWeChatNotRunning      = "wechat-not-running"
-	CodeWeChatNotForeground   = "wechat-not-foreground"
-	CodePermScreenRecording   = "permission-screen-recording"
-	CodePermAccessibility     = "permission-accessibility"
-	CodeHelperCrashed         = "helper-crashed"
-	CodeChatNotFound          = "chat-not-found"
-	CodeAXTreeEmpty           = "ax-tree-empty"
-	CodeInternal              = "internal"
+	CodeWeChatNotRunning    = "wechat-not-running"
+	CodeWeChatNotForeground = "wechat-not-foreground"
+	CodePermScreenRecording = "permission-screen-recording"
+	CodePermAccessibility   = "permission-accessibility"
+	CodeHelperCrashed       = "helper-crashed"
+	CodeChatNotFound        = "chat-not-found"
+	CodeAXTreeEmpty         = "ax-tree-empty"
+	CodeInternal            = "internal"
 )

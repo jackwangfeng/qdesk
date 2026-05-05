@@ -7,9 +7,9 @@ import (
 
 func TestHealthResponseRoundTrip(t *testing.T) {
 	in := HealthResponse{
-		OK:                       true,
-		ScreenRecordingGranted:   true,
-		AccessibilityGranted:     false,
+		OK:                     true,
+		ScreenRecordingGranted: true,
+		AccessibilityGranted:   false,
 	}
 	b, err := json.Marshal(in)
 	if err != nil {
