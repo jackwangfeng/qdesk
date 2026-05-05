@@ -123,12 +123,32 @@ func (s *MCPServer) toolType(ctx context.Context, args json.RawMessage) (*ToolRe
 	if err := json.Unmarshal(args, &in); err != nil {
 		return errToolResult(err), nil
 	}
-	body, _ := json.Marshal(macproto.TypeRequest{Text: in.Text})
-	if _, err := s.helper.Call(ctx, macproto.MethodType, body); err != nil {
+	if isASCII(in.Text) {
+		body, _ := json.Marshal(macproto.TypeRequest{Text: in.Text})
+		if _, err := s.helper.Call(ctx, macproto.MethodType, body); err != nil {
+			return errToolResult(err), nil
+		}
+		return &ToolResult{Content: []ContentItem{{Type: "text",
+			Text: fmt.Sprintf("typed %d characters (CGEvent unicode)", len([]rune(in.Text)))}}}, nil
+	}
+	// Non-ASCII: WeChat's IME drops CGEvent unicode chars; route through
+	// the helper's clipboard-paste path which restores the prior clipboard.
+	body, _ := json.Marshal(macproto.ClipboardPasteRequest{Text: in.Text})
+	if _, err := s.helper.Call(ctx, macproto.MethodClipboardPaste, body); err != nil {
 		return errToolResult(err), nil
 	}
 	return &ToolResult{Content: []ContentItem{{Type: "text",
-		Text: fmt.Sprintf("typed %d characters", len([]rune(in.Text)))}}}, nil
+		Text: fmt.Sprintf("pasted %d characters (clipboard fallback for non-ASCII)", len([]rune(in.Text)))}}}, nil
+}
+
+// isASCII returns true iff every rune in s is in 0x00-0x7F.
+func isASCII(s string) bool {
+	for _, r := range s {
+		if r > 0x7F {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *MCPServer) toolKey(ctx context.Context, args json.RawMessage) (*ToolResult, error) {

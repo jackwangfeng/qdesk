@@ -122,7 +122,7 @@ func TestTypeSendsText(t *testing.T) {
 		f.SetHandler(macproto.MethodFrontApp, func(_ json.RawMessage) (json.RawMessage, error) {
 			return json.RawMessage(`{"bundleId":"com.tencent.xinWeChat"}`), nil
 		})
-		f.SetHandler(macproto.MethodType, func(p json.RawMessage) (json.RawMessage, error) {
+		f.SetHandler(macproto.MethodClipboardPaste, func(p json.RawMessage) (json.RawMessage, error) {
 			captured = p
 			return json.RawMessage(`{"ok":true}`), nil
 		})
@@ -169,5 +169,63 @@ func TestKeyAndScrollPassthrough(t *testing.T) {
 	}
 	if !strings.Contains(gotScroll, `"dy":-3`) {
 		t.Errorf("scroll dy not propagated: %s", gotScroll)
+	}
+}
+
+func TestTypeRoutesASCIIThroughCGEventType(t *testing.T) {
+	gotType := false
+	gotPaste := false
+	srv := newServerWithFake(func(f *FakeSupervisor) {
+		f.SetHandler(macproto.MethodFrontApp, func(_ json.RawMessage) (json.RawMessage, error) {
+			return json.RawMessage(`{"bundleId":"com.tencent.xinWeChat"}`), nil
+		})
+		f.SetHandler(macproto.MethodType, func(_ json.RawMessage) (json.RawMessage, error) {
+			gotType = true
+			return json.RawMessage(`{"ok":true}`), nil
+		})
+		f.SetHandler(macproto.MethodClipboardPaste, func(_ json.RawMessage) (json.RawMessage, error) {
+			gotPaste = true
+			return json.RawMessage(`{"ok":true}`), nil
+		})
+	})
+	if _, err := srv.callTool(context.Background(), "wechat.type",
+		json.RawMessage(`{"text":"hello world"}`)); err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if !gotType {
+		t.Errorf("ASCII text should route through MethodType")
+	}
+	if gotPaste {
+		t.Errorf("ASCII text should NOT trigger clipboardPaste")
+	}
+}
+
+func TestTypeRoutesNonASCIIThroughClipboardPaste(t *testing.T) {
+	var pasteText string
+	gotType := false
+	srv := newServerWithFake(func(f *FakeSupervisor) {
+		f.SetHandler(macproto.MethodFrontApp, func(_ json.RawMessage) (json.RawMessage, error) {
+			return json.RawMessage(`{"bundleId":"com.tencent.xinWeChat"}`), nil
+		})
+		f.SetHandler(macproto.MethodType, func(_ json.RawMessage) (json.RawMessage, error) {
+			gotType = true
+			return json.RawMessage(`{"ok":true}`), nil
+		})
+		f.SetHandler(macproto.MethodClipboardPaste, func(p json.RawMessage) (json.RawMessage, error) {
+			var v struct{ Text string }
+			_ = json.Unmarshal(p, &v)
+			pasteText = v.Text
+			return json.RawMessage(`{"ok":true}`), nil
+		})
+	})
+	if _, err := srv.callTool(context.Background(), "wechat.type",
+		json.RawMessage(`{"text":"你好"}`)); err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if gotType {
+		t.Errorf("non-ASCII text should NOT route through MethodType")
+	}
+	if pasteText != "你好" {
+		t.Errorf("clipboardPaste payload mismatch: got=%q want=%q", pasteText, "你好")
 	}
 }
