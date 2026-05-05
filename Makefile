@@ -139,6 +139,7 @@ ci: vet test build image smoke ## What CI runs.
 
 .PHONY: mac-build
 mac-build: ## Build qdesk-mac and qdesk-mac-helper for macOS.
+	@mkdir -p bin
 	go build -o bin/qdesk-mac ./cmd/qdesk-mac
 	cd cmd/qdesk-mac-helper && swift build -c release
 	cp cmd/qdesk-mac-helper/.build/release/Helper bin/qdesk-mac-helper
