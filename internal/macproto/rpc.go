@@ -12,16 +12,17 @@ import "encoding/json"
 // any change here requires a matching change in
 // cmd/qdesk-mac-helper/Sources/Helper/main.swift dispatch.
 const (
-	MethodHealth     = "health"
-	MethodFrontApp   = "frontApp"
-	MethodActivate   = "activate"
-	MethodScreenshot = "screenshot"
-	MethodClick      = "click"
-	MethodType       = "type"
-	MethodKey        = "key"
-	MethodScroll     = "scroll"
-	MethodAXTree     = "axTree"
-	MethodAXClick    = "axClick"
+	MethodHealth         = "health"
+	MethodFrontApp       = "frontApp"
+	MethodActivate       = "activate"
+	MethodScreenshot     = "screenshot"
+	MethodClick          = "click"
+	MethodType           = "type"
+	MethodKey            = "key"
+	MethodScroll         = "scroll"
+	MethodAXTree         = "axTree"
+	MethodAXClick        = "axClick"
+	MethodClipboardPaste = "clipboardPaste"
 )
 
 // Request is one JSON-RPC call from Go → helper.
@@ -133,6 +134,17 @@ type AXTreeResponse struct {
 type AXClickRequest struct {
 	BundleID string `json:"bundleId"`
 	Path     string `json:"path"`
+}
+
+// ClipboardPasteRequest tells the helper to set the system pasteboard to
+// `text`, post a cmd+v keyboard event, wait briefly for the paste to
+// register, then restore the prior pasteboard contents.
+//
+// This is the v1.1 fallback for input that CGEvent unicode-mode cannot
+// deliver to WeChat (Chinese, emoji, etc.). It pollutes the user's
+// clipboard for ~150ms; the helper restores it before returning.
+type ClipboardPasteRequest struct {
+	Text string `json:"text"`
 }
 
 // OK is a generic empty success result.
