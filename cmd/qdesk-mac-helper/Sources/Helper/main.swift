@@ -1,11 +1,15 @@
 import Foundation
 
+let writeQueue = DispatchQueue(label: "qdesk.helper.write")
+
 func writeResponse(_ resp: RPCResponse) {
-    let enc = JSONEncoder()
-    enc.outputFormatting = [.withoutEscapingSlashes]
-    guard let data = try? enc.encode(resp) else { return }
-    FileHandle.standardOutput.write(data)
-    FileHandle.standardOutput.write(Data([0x0A])) // newline
+    writeQueue.sync {
+        let enc = JSONEncoder()
+        enc.outputFormatting = [.withoutEscapingSlashes]
+        guard let data = try? enc.encode(resp) else { return }
+        FileHandle.standardOutput.write(data)
+        FileHandle.standardOutput.write(Data([0x0A]))
+    }
 }
 
 func writeError(id: Int, code: String, message: String) {
@@ -42,28 +46,44 @@ func dispatch(_ req: RPCRequest) {
         } catch {
             writeError(id: req.id, code: "internal", message: "\(error)")
         }
+    case "screenshot":
+        let id = req.id
+        Task {
+            do {
+                let r = try await screenshot()
+                writeResult(id: id, value: r)
+            } catch let e as HelperRPCError {
+                writeError(id: id, code: e.code, message: e.message)
+            } catch {
+                writeError(id: id, code: "internal", message: "\(error)")
+            }
+        }
     default:
         writeError(id: req.id, code: "internal", message: "method not implemented: \(req.method)")
     }
 }
 
-// stdin loop: one JSON object per line.
-let stdin = FileHandle.standardInput
-let dec = JSONDecoder()
-var buffer = Data()
-while true {
-    let chunk = stdin.availableData
-    if chunk.isEmpty { break }
-    buffer.append(chunk)
-    while let nl = buffer.firstIndex(of: 0x0A) {
-        let line = buffer.subdata(in: 0..<nl)
-        buffer.removeSubrange(0...nl)
-        if line.isEmpty { continue }
-        do {
-            let req = try dec.decode(RPCRequest.self, from: line)
-            dispatch(req)
-        } catch {
-            FileHandle.standardError.write(Data("decode error: \(error)\n".utf8))
+DispatchQueue.global(qos: .userInitiated).async {
+    let stdin = FileHandle.standardInput
+    let dec = JSONDecoder()
+    var buffer = Data()
+    while true {
+        let chunk = stdin.availableData
+        if chunk.isEmpty {
+            exit(0)
+        }
+        buffer.append(chunk)
+        while let nl = buffer.firstIndex(of: 0x0A) {
+            let line = buffer.subdata(in: 0..<nl)
+            buffer.removeSubrange(0...nl)
+            if line.isEmpty { continue }
+            do {
+                let req = try dec.decode(RPCRequest.self, from: line)
+                dispatch(req)
+            } catch {
+                FileHandle.standardError.write(Data("decode error: \(error)\n".utf8))
+            }
         }
     }
 }
+RunLoop.main.run()
