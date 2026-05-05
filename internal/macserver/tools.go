@@ -34,8 +34,16 @@ func (s *MCPServer) callTool(ctx context.Context, name string, args json.RawMess
 			return errToolResult(err), nil
 		}
 		return s.toolScroll(ctx, args)
-	case "wechat.list_chats", "wechat.open_chat":
-		return errToolResult(fmt.Errorf("tool not yet implemented: %s", name)), nil
+	case "wechat.list_chats":
+		if err := requireWeChatForeground(ctx, s.helper); err != nil {
+			return errToolResult(err), nil
+		}
+		return s.toolListChats(ctx)
+	case "wechat.open_chat":
+		if err := requireWeChatForeground(ctx, s.helper); err != nil {
+			return errToolResult(err), nil
+		}
+		return s.toolOpenChat(ctx, args)
 	default:
 		return errToolResult(fmt.Errorf("unknown tool: %s", name)), nil
 	}
