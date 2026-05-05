@@ -30,6 +30,18 @@ func dispatch(_ req: RPCRequest) {
     switch req.method {
     case "health":
         writeResult(id: req.id, value: health())
+    case "frontApp":
+        writeResult(id: req.id, value: frontApp())
+    case "activate":
+        do {
+            let p = try JSONDecoder().decode(ActivateRequest.self, from: req.params ?? Data("{}".utf8))
+            try activate(p)
+            writeOK(id: req.id)
+        } catch let e as HelperRPCError {
+            writeError(id: req.id, code: e.code, message: e.message)
+        } catch {
+            writeError(id: req.id, code: "internal", message: "\(error)")
+        }
     default:
         writeError(id: req.id, code: "internal", message: "method not implemented: \(req.method)")
     }
