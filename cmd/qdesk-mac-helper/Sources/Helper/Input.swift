@@ -80,10 +80,41 @@ func resolveKeyCombo(_ combo: String) throws -> (CGKeyCode, CGEventFlags) {
     case "down": keyCode = 0x7D
     case "up": keyCode = 0x7E
     case "a": keyCode = 0x00
+    case "b": keyCode = 0x0B
     case "c": keyCode = 0x08
+    case "d": keyCode = 0x02
+    case "e": keyCode = 0x0E
+    case "f": keyCode = 0x03
+    case "g": keyCode = 0x05
+    case "h": keyCode = 0x04
+    case "i": keyCode = 0x22
+    case "j": keyCode = 0x26
+    case "k": keyCode = 0x28
+    case "l": keyCode = 0x25
+    case "m": keyCode = 0x2E
+    case "n": keyCode = 0x2D
+    case "o": keyCode = 0x1F
+    case "p": keyCode = 0x23
+    case "q": keyCode = 0x0C
+    case "r": keyCode = 0x0F
+    case "s": keyCode = 0x01
+    case "t": keyCode = 0x11
+    case "u": keyCode = 0x20
     case "v": keyCode = 0x09
+    case "w": keyCode = 0x0D
     case "x": keyCode = 0x07
+    case "y": keyCode = 0x10
     case "z": keyCode = 0x06
+    case "0": keyCode = 0x1D
+    case "1": keyCode = 0x12
+    case "2": keyCode = 0x13
+    case "3": keyCode = 0x14
+    case "4": keyCode = 0x15
+    case "5": keyCode = 0x17
+    case "6": keyCode = 0x16
+    case "7": keyCode = 0x1A
+    case "8": keyCode = 0x1C
+    case "9": keyCode = 0x19
     default:
         throw HelperRPCError(code: "internal", message: "unknown key: \(keyName)")
     }
