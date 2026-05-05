@@ -102,6 +102,28 @@ func dispatch(_ req: RPCRequest) {
         } catch {
             writeError(id: req.id, code: "internal", message: "\(error)")
         }
+    case "axTree":
+        do {
+            struct P: Decodable { let bundleId: String; let query: String }
+            let p = try JSONDecoder().decode(P.self, from: req.params ?? Data("{}".utf8))
+            let r = try axTree(bundleId: p.bundleId, query: p.query)
+            writeResult(id: req.id, value: r)
+        } catch let e as HelperRPCError {
+            writeError(id: req.id, code: e.code, message: e.message)
+        } catch {
+            writeError(id: req.id, code: "internal", message: "\(error)")
+        }
+    case "axClick":
+        do {
+            struct P: Decodable { let bundleId: String; let path: String }
+            let p = try JSONDecoder().decode(P.self, from: req.params ?? Data("{}".utf8))
+            try axClick(bundleId: p.bundleId, path: p.path)
+            writeOK(id: req.id)
+        } catch let e as HelperRPCError {
+            writeError(id: req.id, code: e.code, message: e.message)
+        } catch {
+            writeError(id: req.id, code: "internal", message: "\(error)")
+        }
     default:
         writeError(id: req.id, code: "internal", message: "method not implemented: \(req.method)")
     }
