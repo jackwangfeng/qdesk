@@ -124,6 +124,17 @@ func dispatch(_ req: RPCRequest) {
         } catch {
             writeError(id: req.id, code: "internal", message: "\(error)")
         }
+    case "clipboardPaste":
+        do {
+            struct P: Decodable { let text: String }
+            let p = try JSONDecoder().decode(P.self, from: req.params ?? Data("{}".utf8))
+            try clipboardPaste(text: p.text)
+            writeOK(id: req.id)
+        } catch let e as HelperRPCError {
+            writeError(id: req.id, code: e.code, message: e.message)
+        } catch {
+            writeError(id: req.id, code: "internal", message: "\(error)")
+        }
     default:
         writeError(id: req.id, code: "internal", message: "method not implemented: \(req.method)")
     }
