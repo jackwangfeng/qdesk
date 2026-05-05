@@ -128,7 +128,6 @@ func (s *Supervisor) Close() error {
 		return s.closeErr
 	}
 	_ = s.stdin.Close()
-	_ = s.stderr
 	done := make(chan error, 1)
 	go func() { done <- s.cmd.Wait() }()
 	select {
