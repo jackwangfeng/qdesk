@@ -4,6 +4,10 @@
 *.test
 *.out
 /dist/
+/bin/
+
+# Swift build outputs
+.build/
 
 # Editor / OS
 .env
