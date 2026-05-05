@@ -21,12 +21,24 @@ func TestToolsListIncludesExpectedTools(t *testing.T) {
 	got := string(b)
 	for _, want := range []string{
 		"wechat.screenshot", "wechat.click", "wechat.type", "wechat.key",
-		"wechat.scroll", "wechat.ensure_foreground",
-		"wechat.list_chats", "wechat.open_chat",
+		"wechat.scroll", "wechat.ensure_foreground", "wechat.open_chat",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("tools/list missing %q; got=%s", want, got)
 		}
+	}
+}
+
+func TestToolsListDoesNotIncludeListChats(t *testing.T) {
+	srv := NewMCPServer(NewFakeSupervisor())
+	resp := srv.Handle(context.Background(), &RPCRequest{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`1`),
+		Method:  "tools/list",
+	})
+	b, _ := json.Marshal(resp.Result)
+	if strings.Contains(string(b), "wechat.list_chats") {
+		t.Errorf("wechat.list_chats was removed in v1.1; it must not appear in tools/list")
 	}
 }
 

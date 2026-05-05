@@ -155,13 +155,8 @@ func (s *MCPServer) tools() []ToolDef {
 			},
 		},
 		{
-			Name:        "wechat.list_chats",
-			Description: "Return WeChat sidebar chat list as structured JSON: name, unread_count, last_msg_preview. Uses the Accessibility API — no vision needed.",
-			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
-		},
-		{
 			Name:        "wechat.open_chat",
-			Description: "Open the conversation with the given chat name. Uses fuzzy matching on the sidebar (exact > prefix > substring). Returns chat-not-found if no sidebar match — v1 has no automatic cmd+f search fallback; the caller can compose that manually with wechat.key + wechat.type if needed.",
+			Description: "Open the conversation with the given chat name. Drives WeChat's own search bar (cmd+f) — does not depend on the Accessibility tree, which WeChat 4.x no longer exposes for the sidebar. Does not guarantee the right chat opens; verify with wechat.screenshot.",
 			InputSchema: map[string]any{
 				"type":       "object",
 				"properties": map[string]any{"name": map[string]any{"type": "string"}},
