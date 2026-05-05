@@ -161,7 +161,7 @@ func (s *MCPServer) tools() []ToolDef {
 		},
 		{
 			Name:        "wechat.open_chat",
-			Description: "Open the conversation with the given chat name. Uses fuzzy matching on the sidebar; falls back to the cmd+f search field if no sidebar match.",
+			Description: "Open the conversation with the given chat name. Uses fuzzy matching on the sidebar (exact > prefix > substring). Returns chat-not-found if no sidebar match — v1 has no automatic cmd+f search fallback; the caller can compose that manually with wechat.key + wechat.type if needed.",
 			InputSchema: map[string]any{
 				"type":       "object",
 				"properties": map[string]any{"name": map[string]any{"type": "string"}},

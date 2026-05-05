@@ -122,7 +122,9 @@ func (s *Supervisor) Call(ctx context.Context, method string, params json.RawMes
 	return resp.Result, nil
 }
 
-// Close terminates the helper. SIGTERM, then SIGKILL after 5 seconds.
+// Close terminates the helper: closes stdin (the helper's main.swift
+// loop sees EOF and exit(0)s), waits up to 5 seconds, then SIGKILLs if
+// still alive.
 func (s *Supervisor) Close() error {
 	if s.closed.Swap(true) {
 		return s.closeErr

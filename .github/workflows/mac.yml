@@ -17,6 +17,7 @@ on:
       - "internal/macproto/**"
       - "internal/macserver/**"
       - ".github/workflows/mac.yml"
+      - "Makefile"
 
 concurrency:
   group: mac-${{ github.ref }}

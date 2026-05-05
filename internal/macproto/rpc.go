@@ -115,9 +115,13 @@ type AXNode struct {
 	Frame       Frame  `json:"frame"`
 }
 
-// Frame is in LOGICAL screen points.
+// Frame is in LOGICAL screen points. JSON tags lowercase to match what
+// the Swift helper emits (Swift Codable is case-sensitive on encode).
 type Frame struct {
-	X, Y, W, H float64
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+	W float64 `json:"w"`
+	H float64 `json:"h"`
 }
 
 // AXTreeResponse is the matched flat list of AX nodes.
@@ -138,6 +142,13 @@ type OK struct {
 
 // Error codes surfaced to the LLM. Stable strings — do not rename without
 // updating the README + tool descriptions.
+//
+// Most of these are emitted by the Swift helper as raw string literals
+// (see Sources/Helper/*.swift) and parsed back into HelperError by the Go
+// supervisor. The Go-side constants here are the canonical reference list
+// for both sides; only the ones used in Go code (CodeWeChatNotForeground,
+// CodeChatNotFound, CodeAXTreeEmpty, CodeInternal) are referenced from
+// Go directly. The rest exist for documentation parity with the helper.
 const (
 	CodeWeChatNotRunning    = "wechat-not-running"
 	CodeWeChatNotForeground = "wechat-not-foreground"
