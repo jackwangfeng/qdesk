@@ -39,7 +39,7 @@
 | 消息推送 / 监听 | 不支持（轮询由调用方决定） |
 | 录屏 / 流式 | 不支持 |
 | 签名 / 公证 | v1 不做，README 说明 dev install 方式；v1.x 再做 codesign + notarize |
-| 平台 | 仅 macOS（Apple Silicon + Intel 都支持）；Intel 优先级低 |
+| 平台 | 仅 macOS 14+（Apple Silicon + Intel 都支持）；Intel 优先级低。`SCScreenshotManager.captureImage` 是 macOS 14 引入的 |
 | 微信版本 | 微信 Mac 官方版（非 App Store 阉割版）。AX 助手在大版本变更后可能失效，generic primitives 不受影响 |
 | 中英双语 | UI 不依赖语言；AX 助手按 role 找节点不按文本，能跨简中/英文 |
 

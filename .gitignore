@@ -4,6 +4,10 @@
 *.test
 *.out
 /dist/
+/bin/
+
+# Swift build outputs
+.build/
 
 # Editor / OS
 .env
@@ -17,3 +21,4 @@
 /qdesk-control.db
 /qdesk-control.db-shm
 /qdesk-control.db-wal
+.claude/
