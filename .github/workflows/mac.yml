@@ -1,0 +1,57 @@
+name: mac
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "cmd/qdesk-mac/**"
+      - "cmd/qdesk-mac-helper/**"
+      - "internal/macproto/**"
+      - "internal/macserver/**"
+      - ".github/workflows/mac.yml"
+      - "Makefile"
+  pull_request:
+    paths:
+      - "cmd/qdesk-mac/**"
+      - "cmd/qdesk-mac-helper/**"
+      - "internal/macproto/**"
+      - "internal/macserver/**"
+      - ".github/workflows/mac.yml"
+
+concurrency:
+  group: mac-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  # ── Build Mac binaries + Go/Swift tests + MCP smoke ─────────────────
+  build-and-test:
+    name: Build + test (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build
+        run: make mac-build
+
+      - name: Go tests (macproto + macserver + cmd/qdesk-mac)
+        # Supervisor + tools tests; helper is built so supervisor_test will run.
+        # AX-dependent helper tests will skip without TCC permission.
+        run: go test -v ./internal/macproto/... ./internal/macserver/... ./cmd/qdesk-mac/...
+
+      - name: Swift tests
+        # Tests that require TCC (Capture/Input/Accessibility) skip via XCTSkipUnless.
+        # Health + JSON encoding tests run unconditionally.
+        run: cd cmd/qdesk-mac-helper && swift test
+
+      - name: Smoke — initialize + tools/list
+        run: |
+          out=$(printf '%s\n%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize"}' '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' | ./bin/qdesk-mac)
+          echo "$out"
+          echo "$out" | grep -q '"name":"qdesk-mac"'
+          echo "$out" | grep -q 'wechat.screenshot'
