@@ -171,15 +171,3 @@ func (s *MCPServer) tools() []ToolDef {
 	}
 }
 
-// callTool is a stub; implementations land in Tasks 10-12.
-func (s *MCPServer) callTool(ctx context.Context, name string, args json.RawMessage) (*ToolResult, error) {
-	return nil, errNotImplemented(name)
-}
-
-func errNotImplemented(name string) error {
-	return &notImplErr{name: name}
-}
-
-type notImplErr struct{ name string }
-
-func (e *notImplErr) Error() string { return "tool not implemented: " + e.name }
