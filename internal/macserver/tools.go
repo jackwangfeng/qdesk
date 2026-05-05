@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/jeffwang/qdesk/internal/macproto"
 )
@@ -34,11 +35,6 @@ func (s *MCPServer) callTool(ctx context.Context, name string, args json.RawMess
 			return errToolResult(err), nil
 		}
 		return s.toolScroll(ctx, args)
-	case "wechat.list_chats":
-		if err := requireWeChatForeground(ctx, s.helper); err != nil {
-			return errToolResult(err), nil
-		}
-		return s.toolListChats(ctx)
 	case "wechat.open_chat":
 		if err := requireWeChatForeground(ctx, s.helper); err != nil {
 			return errToolResult(err), nil
@@ -123,12 +119,32 @@ func (s *MCPServer) toolType(ctx context.Context, args json.RawMessage) (*ToolRe
 	if err := json.Unmarshal(args, &in); err != nil {
 		return errToolResult(err), nil
 	}
-	body, _ := json.Marshal(macproto.TypeRequest{Text: in.Text})
-	if _, err := s.helper.Call(ctx, macproto.MethodType, body); err != nil {
+	if isASCII(in.Text) {
+		body, _ := json.Marshal(macproto.TypeRequest{Text: in.Text})
+		if _, err := s.helper.Call(ctx, macproto.MethodType, body); err != nil {
+			return errToolResult(err), nil
+		}
+		return &ToolResult{Content: []ContentItem{{Type: "text",
+			Text: fmt.Sprintf("typed %d characters (CGEvent unicode)", len([]rune(in.Text)))}}}, nil
+	}
+	// Non-ASCII: WeChat's IME drops CGEvent unicode chars; route through
+	// the helper's clipboard-paste path which restores the prior clipboard.
+	body, _ := json.Marshal(macproto.ClipboardPasteRequest{Text: in.Text})
+	if _, err := s.helper.Call(ctx, macproto.MethodClipboardPaste, body); err != nil {
 		return errToolResult(err), nil
 	}
 	return &ToolResult{Content: []ContentItem{{Type: "text",
-		Text: fmt.Sprintf("typed %d characters", len([]rune(in.Text)))}}}, nil
+		Text: fmt.Sprintf("pasted %d characters (clipboard fallback for non-ASCII)", len([]rune(in.Text)))}}}, nil
+}
+
+// isASCII returns true iff every rune in s is in 0x00-0x7F.
+func isASCII(s string) bool {
+	for _, r := range s {
+		if r > 0x7F {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *MCPServer) toolKey(ctx context.Context, args json.RawMessage) (*ToolResult, error) {
@@ -155,4 +171,56 @@ func (s *MCPServer) toolScroll(ctx context.Context, args json.RawMessage) (*Tool
 	}
 	return &ToolResult{Content: []ContentItem{{Type: "text",
 		Text: fmt.Sprintf("scrolled (dx=%.1f dy=%.1f) at (%.1f, %.1f)", in.DX, in.DY, in.X, in.Y)}}}, nil
+}
+
+// toolOpenChat opens a WeChat conversation by name via the keyboard
+// search bar (cmd+f). Bypasses the Accessibility tree, which WeChat 4.x
+// no longer exposes for the chat sidebar.
+//
+// Sequence:
+//  1. key cmd+f                         (open WeChat search; ~300ms to render)
+//  2. type / clipboardPaste <name>      (search filters live)
+//  3. key return                        (open the top match)
+//
+// We do NOT verify which chat actually opened — WeChat's own search
+// matching is opaque. The LLM should call wechat.screenshot afterward
+// to confirm the right chat is in front.
+func (s *MCPServer) toolOpenChat(ctx context.Context, args json.RawMessage) (*ToolResult, error) {
+	var in struct{ Name string }
+	if err := json.Unmarshal(args, &in); err != nil {
+		return errToolResult(err), nil
+	}
+	if in.Name == "" {
+		return errToolResult(fmt.Errorf("name is required")), nil
+	}
+
+	// 1. cmd+f
+	cmdfBody, _ := json.Marshal(macproto.KeyRequest{Combo: "cmd+f"})
+	if _, err := s.helper.Call(ctx, macproto.MethodKey, cmdfBody); err != nil {
+		return errToolResult(err), nil
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	// 2. type the name (route Chinese through clipboardPaste)
+	if isASCII(in.Name) {
+		body, _ := json.Marshal(macproto.TypeRequest{Text: in.Name})
+		if _, err := s.helper.Call(ctx, macproto.MethodType, body); err != nil {
+			return errToolResult(err), nil
+		}
+	} else {
+		body, _ := json.Marshal(macproto.ClipboardPasteRequest{Text: in.Name})
+		if _, err := s.helper.Call(ctx, macproto.MethodClipboardPaste, body); err != nil {
+			return errToolResult(err), nil
+		}
+	}
+	time.Sleep(200 * time.Millisecond)
+
+	// 3. return to open the top result
+	retBody, _ := json.Marshal(macproto.KeyRequest{Combo: "return"})
+	if _, err := s.helper.Call(ctx, macproto.MethodKey, retBody); err != nil {
+		return errToolResult(err), nil
+	}
+
+	return &ToolResult{Content: []ContentItem{{Type: "text",
+		Text: fmt.Sprintf("issued cmd+f / paste %q / return — verify with wechat.screenshot which chat actually opened", in.Name)}}}, nil
 }

@@ -38,3 +38,24 @@ func TestEnvelopeRoundTrip(t *testing.T) {
 		t.Errorf("envelope mismatch: got=%+v want=%+v", out, req)
 	}
 }
+
+func TestClipboardPasteRequestRoundTrip(t *testing.T) {
+	in := ClipboardPasteRequest{Text: "你好 hello"}
+	b, err := json.Marshal(in)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var out ClipboardPasteRequest
+	if err := json.Unmarshal(b, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out != in {
+		t.Errorf("round-trip mismatch: got=%+v want=%+v", out, in)
+	}
+}
+
+func TestMethodClipboardPasteString(t *testing.T) {
+	if MethodClipboardPaste != "clipboardPaste" {
+		t.Errorf("MethodClipboardPaste must be %q so the Swift helper can match it", "clipboardPaste")
+	}
+}
