@@ -14,13 +14,26 @@ func (s *MCPServer) callTool(ctx context.Context, name string, args json.RawMess
 		return s.toolEnsureForeground(ctx)
 	case "wechat.screenshot":
 		return s.toolScreenshot(ctx)
-	case "wechat.click", "wechat.type", "wechat.key", "wechat.scroll":
-		// Action tools all share the foreground guard; implementations live
-		// in the next task. For now return a typed not-implemented.
+	case "wechat.click":
 		if err := requireWeChatForeground(ctx, s.helper); err != nil {
 			return errToolResult(err), nil
 		}
-		return errToolResult(fmt.Errorf("tool not yet implemented: %s", name)), nil
+		return s.toolClick(ctx, args)
+	case "wechat.type":
+		if err := requireWeChatForeground(ctx, s.helper); err != nil {
+			return errToolResult(err), nil
+		}
+		return s.toolType(ctx, args)
+	case "wechat.key":
+		if err := requireWeChatForeground(ctx, s.helper); err != nil {
+			return errToolResult(err), nil
+		}
+		return s.toolKey(ctx, args)
+	case "wechat.scroll":
+		if err := requireWeChatForeground(ctx, s.helper); err != nil {
+			return errToolResult(err), nil
+		}
+		return s.toolScroll(ctx, args)
 	case "wechat.list_chats", "wechat.open_chat":
 		return errToolResult(fmt.Errorf("tool not yet implemented: %s", name)), nil
 	default:
@@ -70,4 +83,68 @@ func errToolResult(err error) *ToolResult {
 		IsError: true,
 		Content: []ContentItem{{Type: "text", Text: err.Error()}},
 	}
+}
+
+func (s *MCPServer) toolClick(ctx context.Context, args json.RawMessage) (*ToolResult, error) {
+	var in struct {
+		X, Y   float64
+		Button string
+		Clicks int
+	}
+	if len(args) > 0 {
+		_ = json.Unmarshal(args, &in)
+	}
+	if in.Button == "" {
+		in.Button = "left"
+	}
+	if in.Clicks == 0 {
+		in.Clicks = 1
+	}
+	body, _ := json.Marshal(macproto.ClickRequest{
+		X: in.X, Y: in.Y, Button: in.Button, Clicks: in.Clicks,
+	})
+	if _, err := s.helper.Call(ctx, macproto.MethodClick, body); err != nil {
+		return errToolResult(err), nil
+	}
+	return &ToolResult{Content: []ContentItem{{Type: "text",
+		Text: fmt.Sprintf("clicked %s×%d at (%.1f, %.1f)", in.Button, in.Clicks, in.X, in.Y)}}}, nil
+}
+
+func (s *MCPServer) toolType(ctx context.Context, args json.RawMessage) (*ToolResult, error) {
+	var in struct{ Text string }
+	if err := json.Unmarshal(args, &in); err != nil {
+		return errToolResult(err), nil
+	}
+	body, _ := json.Marshal(macproto.TypeRequest{Text: in.Text})
+	if _, err := s.helper.Call(ctx, macproto.MethodType, body); err != nil {
+		return errToolResult(err), nil
+	}
+	return &ToolResult{Content: []ContentItem{{Type: "text",
+		Text: fmt.Sprintf("typed %d characters", len([]rune(in.Text)))}}}, nil
+}
+
+func (s *MCPServer) toolKey(ctx context.Context, args json.RawMessage) (*ToolResult, error) {
+	var in struct{ Combo string }
+	if err := json.Unmarshal(args, &in); err != nil {
+		return errToolResult(err), nil
+	}
+	body, _ := json.Marshal(macproto.KeyRequest{Combo: in.Combo})
+	if _, err := s.helper.Call(ctx, macproto.MethodKey, body); err != nil {
+		return errToolResult(err), nil
+	}
+	return &ToolResult{Content: []ContentItem{{Type: "text",
+		Text: fmt.Sprintf("sent key %q", in.Combo)}}}, nil
+}
+
+func (s *MCPServer) toolScroll(ctx context.Context, args json.RawMessage) (*ToolResult, error) {
+	var in struct{ X, Y, DX, DY float64 }
+	if err := json.Unmarshal(args, &in); err != nil {
+		return errToolResult(err), nil
+	}
+	body, _ := json.Marshal(macproto.ScrollRequest{X: in.X, Y: in.Y, DX: in.DX, DY: in.DY})
+	if _, err := s.helper.Call(ctx, macproto.MethodScroll, body); err != nil {
+		return errToolResult(err), nil
+	}
+	return &ToolResult{Content: []ContentItem{{Type: "text",
+		Text: fmt.Sprintf("scrolled (dx=%.1f dy=%.1f) at (%.1f, %.1f)", in.DX, in.DY, in.X, in.Y)}}}, nil
 }
