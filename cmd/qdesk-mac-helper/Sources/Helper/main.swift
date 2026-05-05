@@ -58,6 +58,50 @@ func dispatch(_ req: RPCRequest) {
                 writeError(id: id, code: "internal", message: "\(error)")
             }
         }
+    case "click":
+        do {
+            struct P: Decodable { let x, y: Double; let button: String; let clicks: Int }
+            let p = try JSONDecoder().decode(P.self, from: req.params ?? Data("{}".utf8))
+            try clickGlobal(x: p.x, y: p.y, button: p.button, clicks: p.clicks)
+            writeOK(id: req.id)
+        } catch let e as HelperRPCError {
+            writeError(id: req.id, code: e.code, message: e.message)
+        } catch {
+            writeError(id: req.id, code: "internal", message: "\(error)")
+        }
+    case "type":
+        do {
+            struct P: Decodable { let text: String }
+            let p = try JSONDecoder().decode(P.self, from: req.params ?? Data("{}".utf8))
+            try typeText(p.text)
+            writeOK(id: req.id)
+        } catch let e as HelperRPCError {
+            writeError(id: req.id, code: e.code, message: e.message)
+        } catch {
+            writeError(id: req.id, code: "internal", message: "\(error)")
+        }
+    case "key":
+        do {
+            struct P: Decodable { let combo: String }
+            let p = try JSONDecoder().decode(P.self, from: req.params ?? Data("{}".utf8))
+            try sendKey(p.combo)
+            writeOK(id: req.id)
+        } catch let e as HelperRPCError {
+            writeError(id: req.id, code: e.code, message: e.message)
+        } catch {
+            writeError(id: req.id, code: "internal", message: "\(error)")
+        }
+    case "scroll":
+        do {
+            struct P: Decodable { let x, y, dx, dy: Double }
+            let p = try JSONDecoder().decode(P.self, from: req.params ?? Data("{}".utf8))
+            try scroll(x: p.x, y: p.y, dx: p.dx, dy: p.dy)
+            writeOK(id: req.id)
+        } catch let e as HelperRPCError {
+            writeError(id: req.id, code: e.code, message: e.message)
+        } catch {
+            writeError(id: req.id, code: "internal", message: "\(error)")
+        }
     default:
         writeError(id: req.id, code: "internal", message: "method not implemented: \(req.method)")
     }
