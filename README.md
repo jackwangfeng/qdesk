@@ -43,6 +43,28 @@ needed** — the sandbox doesn't know or care what's running inside.
 
 ---
 
+## Mac host mode (alpha) — control your local WeChat
+
+In addition to the Linux Docker sandbox, qdesk now ships a **Mac host mode**
+for AI assistants to drive native macOS apps. v1 targets WeChat.
+
+```bash
+./scripts/install-mac.sh
+qdesk-mac doctor   # grants Screen Recording + Accessibility
+claude mcp add --transport stdio qdesk-mac -- /usr/local/bin/qdesk-mac
+```
+
+The MCP tools live under `wechat.*`: `screenshot`, `click`, `type`, `key`,
+`scroll`, `ensure_foreground`, `list_chats`, `open_chat`. See
+[`examples/wechat-reply.md`](./examples/wechat-reply.md).
+
+**v1 limitations:** macOS 14+, single WeChat instance, action calls
+require WeChat to be the foreground app, screenshots are full-screen
+(includes other apps' windows). No code signing — TCC may re-prompt
+after rebuild.
+
+---
+
 ## Use cases
 
 qdesk gives you a **primitive**: an AI-controllable Linux desktop. What you
