@@ -55,7 +55,8 @@ claude mcp add --transport stdio qdesk-mac -- /usr/local/bin/qdesk-mac
 ```
 
 The MCP tools live under `wechat.*`: `screenshot`, `click`, `type`, `key`,
-`scroll`, `ensure_foreground`, `list_chats`, `open_chat`. See
+`scroll`, `ensure_foreground`, `open_chat`. `wechat.type` automatically
+falls back to clipboard paste for non-ASCII text. See
 [`examples/wechat-reply.md`](./examples/wechat-reply.md).
 
 **v1 limitations:** macOS 14+, single WeChat instance, action calls
