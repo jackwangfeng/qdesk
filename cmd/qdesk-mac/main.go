@@ -101,5 +101,5 @@ func logf(format string, args ...any) {
 	fmt.Fprintln(os.Stderr, "qdesk-mac: "+fmt.Sprintf(format, args...))
 }
 
-// runDoctor is implemented in doctor.go (Task 13). Stub for now.
-func runDoctor() int { fmt.Fprintln(os.Stderr, "doctor: not yet implemented"); return 1 }
+// runDoctor is implemented in doctor.go (Task 13).
+func runDoctor() int { return runDoctorReal() }
