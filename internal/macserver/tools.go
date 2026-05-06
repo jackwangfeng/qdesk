@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/jeffwang/qdesk/internal/macproto"
@@ -173,12 +174,36 @@ func (s *MCPServer) toolScroll(ctx context.Context, args json.RawMessage) (*Tool
 		Text: fmt.Sprintf("scrolled (dx=%.1f dy=%.1f) at (%.1f, %.1f)", in.DX, in.DY, in.X, in.Y)}}}, nil
 }
 
+// Tunable timing for toolOpenChat. Empirical defaults: 400ms after
+// cmd+f, 250ms after typing — bumped slightly from v1.1's 300/200,
+// which the real-WeChat E2E showed worked but with no margin.
+// Override via env vars (Go duration strings, e.g. "600ms"):
+//
+//	QDESK_MAC_OPENCHAT_CMDF_DELAY
+//	QDESK_MAC_OPENCHAT_TYPE_DELAY
+var (
+	openChatPostCmdFDelay = envDuration("QDESK_MAC_OPENCHAT_CMDF_DELAY", 400*time.Millisecond)
+	openChatPostTypeDelay = envDuration("QDESK_MAC_OPENCHAT_TYPE_DELAY", 250*time.Millisecond)
+)
+
+func envDuration(key string, def time.Duration) time.Duration {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		return def
+	}
+	return d
+}
+
 // toolOpenChat opens a WeChat conversation by name via the keyboard
 // search bar (cmd+f). Bypasses the Accessibility tree, which WeChat 4.x
 // no longer exposes for the chat sidebar.
 //
 // Sequence:
-//  1. key cmd+f                         (open WeChat search; ~300ms to render)
+//  1. key cmd+f                         (open WeChat search; ~400ms to render)
 //  2. type / clipboardPaste <name>      (search filters live)
 //  3. key return                        (open the top match)
 //
@@ -199,7 +224,7 @@ func (s *MCPServer) toolOpenChat(ctx context.Context, args json.RawMessage) (*To
 	if _, err := s.helper.Call(ctx, macproto.MethodKey, cmdfBody); err != nil {
 		return errToolResult(err), nil
 	}
-	time.Sleep(300 * time.Millisecond)
+	time.Sleep(openChatPostCmdFDelay)
 
 	// 2. type the name (route Chinese through clipboardPaste)
 	if isASCII(in.Name) {
@@ -213,7 +238,7 @@ func (s *MCPServer) toolOpenChat(ctx context.Context, args json.RawMessage) (*To
 			return errToolResult(err), nil
 		}
 	}
-	time.Sleep(200 * time.Millisecond)
+	time.Sleep(openChatPostTypeDelay)
 
 	// 3. return to open the top result
 	retBody, _ := json.Marshal(macproto.KeyRequest{Combo: "return"})

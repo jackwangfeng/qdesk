@@ -26,34 +26,25 @@ func restorePasteboard(_ backup: PasteboardBackup) {
     }
 }
 
-/// clipboardPaste:
-///   1. Backup pasteboard.
-///   2. Write `text` to pasteboard.
-///   3. Post cmd+v to the focused app.
-///   4. Wait 150 ms for the paste to consume the pasteboard.
-///   5. Restore the original pasteboard contents.
-///
-/// The active app must accept paste. Caller is responsible for foreground
-/// guard (Go side does this).
-func clipboardPaste(text: String) throws {
+/// clipboardPasteImpl is the testable form. It performs the
+/// backup → set → run-the-paste-action → wait → restore sequence
+/// around an arbitrary `paste` closure. Production passes `postCmdV`;
+/// unit tests pass a no-op closure (or one that observes the pasteboard
+/// mid-flight) so cmd+v is not posted globally onto whatever app
+/// happened to be in focus when the test ran.
+func clipboardPasteImpl(text: String, paste: () throws -> Void) throws {
     let backup = backupPasteboard()
 
     let pb = NSPasteboard.general
     pb.clearContents()
     pb.setString(text, forType: .string)
 
-    // cmd+v: keycode 0x09 ('v') with Command modifier.
-    let cmdV: CGKeyCode = 0x09
-    guard let down = CGEvent(keyboardEventSource: nil, virtualKey: cmdV, keyDown: true),
-          let up = CGEvent(keyboardEventSource: nil, virtualKey: cmdV, keyDown: false)
-    else {
+    do {
+        try paste()
+    } catch {
         restorePasteboard(backup)
-        throw HelperRPCError(code: "internal", message: "create cmd+v CGEvent failed")
+        throw error
     }
-    down.flags = .maskCommand
-    up.flags = .maskCommand
-    down.post(tap: .cghidEventTap)
-    up.post(tap: .cghidEventTap)
 
     // Let the focused app consume the paste before we overwrite the
     // pasteboard. 150 ms is empirical — long enough for WeChat's input
@@ -61,4 +52,28 @@ func clipboardPaste(text: String) throws {
     Thread.sleep(forTimeInterval: 0.15)
 
     restorePasteboard(backup)
+}
+
+/// clipboardPaste is the production entry point: pasteboard plumbing
+/// plus an actual cmd+v keystroke at the system event tap. Caller is
+/// responsible for the foreground guard (Go side does this).
+func clipboardPaste(text: String) throws {
+    try clipboardPasteImpl(text: text, paste: postCmdV)
+}
+
+/// postCmdV synthesises a Command+V keystroke at the system event tap.
+/// Pulled out as a free function so unit tests can pass a no-op closure
+/// to clipboardPasteImpl — the global CGEvent post otherwise lands on
+/// whatever app is in focus during the test run.
+func postCmdV() throws {
+    let cmdV: CGKeyCode = 0x09 // virtual key for 'v'
+    guard let down = CGEvent(keyboardEventSource: nil, virtualKey: cmdV, keyDown: true),
+          let up = CGEvent(keyboardEventSource: nil, virtualKey: cmdV, keyDown: false)
+    else {
+        throw HelperRPCError(code: "internal", message: "create cmd+v CGEvent failed")
+    }
+    down.flags = .maskCommand
+    up.flags = .maskCommand
+    down.post(tap: .cghidEventTap)
+    up.post(tap: .cghidEventTap)
 }
