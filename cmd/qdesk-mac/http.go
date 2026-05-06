@@ -66,8 +66,7 @@ func runHTTP(ctx context.Context, srv *macserver.MCPServer, listen, apiKey strin
 			return
 		}
 		resp := srv.Handle(r.Context(), &req)
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(resp)
+		writeMCPResponse(w, r, resp)
 	})))
 
 	httpSrv := &http.Server{
@@ -92,6 +91,62 @@ func runHTTP(ctx context.Context, srv *macserver.MCPServer, listen, apiKey strin
 		_ = httpSrv.Shutdown(shutdownCtx)
 		return nil
 	}
+}
+
+// writeMCPResponse picks the response framing based on what the client
+// said it accepts. MCP's Streamable HTTP spec lets servers respond with
+// either application/json (single response) or text/event-stream (one
+// or more SSE events terminating in `data: [DONE]\n\n`-style framing).
+//
+// We only ever send one response per request — our tools are not
+// streaming — so the SSE branch emits a single `data:` frame and ends
+// the stream. That's still spec-compliant and lets clients that prefer
+// SSE (Claude Desktop legacy SSE transport, some Cursor builds) work
+// without us standing up a separate /sse endpoint.
+func writeMCPResponse(w http.ResponseWriter, r *http.Request, resp *macserver.RPCResponse) {
+	body, err := json.Marshal(resp)
+	if err != nil {
+		http.Error(w, "marshal response: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if clientWantsSSE(r) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+		// One event with the JSON-RPC response payload, then close.
+		_, _ = w.Write([]byte("data: "))
+		_, _ = w.Write(body)
+		_, _ = w.Write([]byte("\n\n"))
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write(body)
+	_, _ = w.Write([]byte("\n"))
+}
+
+// clientWantsSSE returns true when the request's Accept header lists
+// text/event-stream (with or without a quality factor) ahead of, or in
+// place of, application/json. We're permissive: if SSE appears at all
+// we honor it.
+func clientWantsSSE(r *http.Request) bool {
+	accept := r.Header.Get("Accept")
+	if accept == "" {
+		return false
+	}
+	for _, part := range strings.Split(accept, ",") {
+		mt := strings.TrimSpace(part)
+		// Drop ";q=..." quality factor.
+		if i := strings.IndexByte(mt, ';'); i >= 0 {
+			mt = strings.TrimSpace(mt[:i])
+		}
+		if strings.EqualFold(mt, "text/event-stream") {
+			return true
+		}
+	}
+	return false
 }
 
 // bearerAuth gates the wrapped handler on "Authorization: Bearer <key>"
