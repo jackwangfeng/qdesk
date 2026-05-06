@@ -18,20 +18,40 @@ final class ClipboardTests: XCTestCase {
         XCTAssertEqual(pb.string(forType: .string), "seed-value")
     }
 
-    func testClipboardPasteRestoresOriginal() throws {
-        let h = health()
-        try XCTSkipUnless(h.accessibilityGranted, "Accessibility not granted; skipping (cmd+v post will fail without it)")
-
+    /// Verifies the pasteboard mid-paste actually contains `text` AND
+    /// that the original is restored after — without posting a real
+    /// cmd+v event globally. v1.1's earlier version of this test
+    /// posted cmd+v which would land on whatever app was in focus
+    /// (often the running terminal / Claude Code), polluting it.
+    func testClipboardPasteImplObservesNewTextThenRestores() throws {
         let pb = NSPasteboard.general
         pb.clearContents()
         pb.setString("original", forType: .string)
 
-        // clipboardPaste does NSPasteboard write + cmd+v + sleep + restore.
-        // No app has focus that will accept the paste, but the function
-        // must still complete and restore the original.
-        try clipboardPaste(text: "transient-payload")
+        var observedDuringPaste: String?
+        try clipboardPasteImpl(text: "transient-payload") {
+            observedDuringPaste = pb.string(forType: .string)
+        }
 
+        XCTAssertEqual(observedDuringPaste, "transient-payload",
+                       "pasteboard during paste should contain the new text")
         XCTAssertEqual(pb.string(forType: .string), "original",
                        "clipboard not restored to original")
+    }
+
+    /// If the paste closure throws, the pasteboard must still be
+    /// restored — never leave the user with the transient text on
+    /// their clipboard.
+    func testClipboardPasteImplRestoresOnPasteFailure() {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString("original", forType: .string)
+
+        struct BoomError: Error {}
+        XCTAssertThrowsError(try clipboardPasteImpl(text: "transient") {
+            throw BoomError()
+        })
+        XCTAssertEqual(pb.string(forType: .string), "original",
+                       "clipboard must be restored even when the paste closure throws")
     }
 }
