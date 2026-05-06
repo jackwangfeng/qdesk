@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -243,17 +244,132 @@ func TestMCPRejectsGet(t *testing.T) {
 }
 
 func TestRunHTTPRequiresAPIKey(t *testing.T) {
-	// runHTTP refuses to start with empty key; verify the explicit error.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	fake := macserver.NewFakeSupervisor()
 	srv := macserver.NewMCPServer(fake)
-	err := runHTTP(ctx, srv, "127.0.0.1:0", "", false)
+	err := runHTTP(ctx, srv, httpConfig{Listen: "127.0.0.1:0"})
 	if err == nil {
 		t.Fatal("expected error when api-key is empty")
 	}
 	if !strings.Contains(err.Error(), "api-key") {
 		t.Errorf("error doesn't mention api-key: %v", err)
+	}
+}
+
+func TestRunHTTPRejectsBadCIDR(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	fake := macserver.NewFakeSupervisor()
+	srv := macserver.NewMCPServer(fake)
+	err := runHTTP(ctx, srv, httpConfig{
+		Listen: "127.0.0.1:0", APIKey: "secret",
+		TrustedCIDR: "not-a-cidr",
+	})
+	if err == nil {
+		t.Fatal("expected error on bad CIDR")
+	}
+	if !strings.Contains(err.Error(), "invalid CIDR") {
+		t.Errorf("error doesn't mention invalid CIDR: %v", err)
+	}
+}
+
+func TestParseCIDRs(t *testing.T) {
+	cases := []struct {
+		in      string
+		wantLen int
+		wantErr bool
+	}{
+		{"", 0, false},
+		{"  ", 0, false},
+		{"100.64.0.0/10", 1, false},
+		{"100.64.0.0/10, 10.0.0.0/8", 2, false},
+		{"100.64.0.0/10,, 10.0.0.0/8", 2, false}, // tolerates empty entries
+		{"not-a-cidr", 0, true},
+		{"100.64.0.0/10, junk", 0, true},
+	}
+	for _, c := range cases {
+		got, err := parseCIDRs(c.in)
+		if c.wantErr {
+			if err == nil {
+				t.Errorf("parseCIDRs(%q) = no error, want error", c.in)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("parseCIDRs(%q) error: %v", c.in, err)
+			continue
+		}
+		if len(got) != c.wantLen {
+			t.Errorf("parseCIDRs(%q) = %d nets, want %d", c.in, len(got), c.wantLen)
+		}
+	}
+}
+
+func TestCIDRAllowlistAllowsInRange(t *testing.T) {
+	_, n, _ := net.ParseCIDR("127.0.0.0/8")
+	called := false
+	h := cidrAllowlist([]*net.IPNet{n}, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		called = true
+		w.WriteHeader(200)
+	}))
+	r := httptest.NewRequest("POST", "/mcp", nil)
+	r.RemoteAddr = "127.0.0.1:54321"
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if !called {
+		t.Errorf("handler not called for in-range IP")
+	}
+	if w.Code != 200 {
+		t.Errorf("status: got=%d want=200", w.Code)
+	}
+}
+
+func TestCIDRAllowlistRejectsOutOfRange(t *testing.T) {
+	_, n, _ := net.ParseCIDR("100.64.0.0/10") // Tailscale CGNAT
+	h := cidrAllowlist([]*net.IPNet{n}, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		t.Fatal("handler should not be called for out-of-range IP")
+	}))
+	r := httptest.NewRequest("POST", "/mcp", nil)
+	r.RemoteAddr = "8.8.8.8:54321" // not in 100.64.0.0/10
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != 403 {
+		t.Errorf("status: got=%d want=403", w.Code)
+	}
+}
+
+func TestCIDRAllowlistHonorsXFFFromLoopback(t *testing.T) {
+	// Reverse proxy on localhost forwards real client IP via XFF.
+	_, n, _ := net.ParseCIDR("100.64.0.0/10")
+	called := false
+	h := cidrAllowlist([]*net.IPNet{n}, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		called = true
+	}))
+	r := httptest.NewRequest("POST", "/mcp", nil)
+	r.RemoteAddr = "127.0.0.1:54321"
+	r.Header.Set("X-Forwarded-For", "100.64.1.5")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if !called {
+		t.Errorf("XFF from loopback should be honored: got status=%d", w.Code)
+	}
+}
+
+func TestCIDRAllowlistIgnoresXFFFromRemote(t *testing.T) {
+	// Spoof attempt: remote attacker sets XFF to a trusted IP. We must
+	// NOT trust the header when the immediate peer is non-loopback.
+	_, n, _ := net.ParseCIDR("100.64.0.0/10")
+	h := cidrAllowlist([]*net.IPNet{n}, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		t.Fatal("XFF from non-loopback peer should be ignored")
+	}))
+	r := httptest.NewRequest("POST", "/mcp", nil)
+	r.RemoteAddr = "8.8.8.8:54321" // not loopback, not in allowlist
+	r.Header.Set("X-Forwarded-For", "100.64.1.5")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != 403 {
+		t.Errorf("status: got=%d want=403", w.Code)
 	}
 }
 

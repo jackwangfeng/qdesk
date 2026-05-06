@@ -32,6 +32,11 @@ func main() {
 		"shared bearer token for HTTP mode (env QDESK_MAC_API_KEY). Required when --listen is set; HTTP mode refuses to start with an empty key.")
 	noCaffeinate := flag.Bool("no-caffeinate", false,
 		"HTTP mode only: do NOT spawn `caffeinate -di` to keep the Mac awake while serving")
+	trustedCIDR := flag.String("trusted-cidr",
+		os.Getenv("QDESK_MAC_TRUSTED_CIDR"),
+		"HTTP mode only: comma-separated CIDR allowlist. Connections from outside these ranges get 403 even with a valid bearer key. Recommended for Tailscale: 100.64.0.0/10. Empty = no IP filter.")
+	trustTSHeaders := flag.Bool("trust-tailscale-headers", false,
+		"HTTP mode only: trust Tailscale-User-Login / Tailscale-User-Name request headers (set by `tailscale serve`). Logs the identity of every authenticated request. Set ONLY when you front qdesk-mac with `tailscale serve` — otherwise an attacker can spoof.")
 	flag.Parse()
 
 	ctx, cancel := signal.NotifyContext(context.Background(),
@@ -48,9 +53,16 @@ func main() {
 	srv := macserver.NewMCPServer(sup)
 
 	if *listen != "" {
-		logf("qdesk-mac starting in HTTP mode; helper=%s listen=%s api_key=%v",
-			*helperPath, *listen, *apiKey != "")
-		if err := runHTTP(ctx, srv, *listen, *apiKey, !*noCaffeinate); err != nil {
+		cfg := httpConfig{
+			Listen:               *listen,
+			APIKey:               *apiKey,
+			Caffeinate:           !*noCaffeinate,
+			TrustedCIDR:          *trustedCIDR,
+			TrustTailscaleHeader: *trustTSHeaders,
+		}
+		logf("qdesk-mac starting in HTTP mode; helper=%s listen=%s api_key=%v trusted_cidr=%q ts_headers=%v",
+			*helperPath, cfg.Listen, cfg.APIKey != "", cfg.TrustedCIDR, cfg.TrustTailscaleHeader)
+		if err := runHTTP(ctx, srv, cfg); err != nil {
 			fmt.Fprintf(os.Stderr, "qdesk-mac: %v\n", err)
 			os.Exit(1)
 		}

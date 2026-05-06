@@ -91,13 +91,42 @@ Endpoints:
 - `POST /mcp` — bearer auth required. Body is one JSON-RPC request,
   response is one JSON-RPC response.
 
+Clients that prefer SSE framing (Claude Desktop's legacy SSE
+transport, some Cursor builds) get a single-event stream instead of
+plain JSON when they send `Accept: text/event-stream`. No new
+endpoint, no streaming behavior change.
+
 Hardening before exposing to the public internet:
 
-- Front with TLS (caddy / nginx). qdesk-mac speaks plain HTTP.
+- Front with TLS (caddy / nginx / `tailscale serve`). qdesk-mac speaks plain HTTP.
 - Use a strong `--api-key` (32+ random bytes). It's the only auth.
 - Bind to `127.0.0.1` and tunnel via SSH or Tailscale, OR bind to
   `0.0.0.0` only behind a reverse proxy with ACLs. Don't expose the
   raw port.
+
+#### Tailscale setup (recommended)
+
+```bash
+# 1. Bind only to your Tailscale IP, restrict to the Tailscale CGNAT range:
+qdesk-mac --listen $(tailscale ip -4):8765 \
+          --api-key "$QDESK_MAC_API_KEY" \
+          --trusted-cidr 100.64.0.0/10
+
+# 2. (optional) Front with `tailscale serve` for HTTPS + identity:
+tailscale serve --bg --https=443 http://localhost:8765
+qdesk-mac --listen 127.0.0.1:8765 \
+          --api-key "$QDESK_MAC_API_KEY" \
+          --trusted-cidr 127.0.0.0/8 \
+          --trust-tailscale-headers
+```
+
+`--trusted-cidr` rejects any connection whose source IP is outside the
+listed ranges (multiple comma-separated, e.g. `100.64.0.0/10,10.0.0.0/8`).
+`X-Forwarded-For` is honored only when the immediate peer is loopback,
+so a remote attacker can't spoof their source. `--trust-tailscale-headers`
+logs `Tailscale-User-Login` for every request — only enable when you
+front qdesk-mac with `tailscale serve`, otherwise an attacker can fake
+the headers.
 
 ---
 
