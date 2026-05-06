@@ -41,9 +41,186 @@ func (s *MCPServer) callTool(ctx context.Context, name string, args json.RawMess
 			return errToolResult(err), nil
 		}
 		return s.toolOpenChat(ctx, args)
+
+	// Generic mac.* — drive any app by bundle ID; per-call optional guard.
+	case "mac.front_app":
+		return s.toolMacFrontApp(ctx)
+	case "mac.activate":
+		return s.toolMacActivate(ctx, args)
+	case "mac.screenshot":
+		return s.toolMacScreenshot(ctx)
+	case "mac.click":
+		return s.toolMacClick(ctx, args)
+	case "mac.type":
+		return s.toolMacType(ctx, args)
+	case "mac.key":
+		return s.toolMacKey(ctx, args)
+	case "mac.scroll":
+		return s.toolMacScroll(ctx, args)
+	case "mac.clipboard_paste":
+		return s.toolMacClipboardPaste(ctx, args)
+
 	default:
 		return errToolResult(fmt.Errorf("unknown tool: %s", name)), nil
 	}
+}
+
+// macTargetGuard runs the optional foreground check used by every mac.*
+// action tool. Returns nil when target_bundle_id is empty (no check) or
+// when the front app matches.
+func (s *MCPServer) macTargetGuard(ctx context.Context, target string) error {
+	return requireForeground(ctx, s.helper, target,
+		"foreground-mismatch",
+		"call mac.activate with this bundle_id first")
+}
+
+func (s *MCPServer) toolMacFrontApp(ctx context.Context) (*ToolResult, error) {
+	raw, err := s.helper.Call(ctx, macproto.MethodFrontApp, json.RawMessage(`{}`))
+	if err != nil {
+		return errToolResult(err), nil
+	}
+	var fa macproto.FrontAppResponse
+	if err := json.Unmarshal(raw, &fa); err != nil {
+		return errToolResult(err), nil
+	}
+	return &ToolResult{Content: []ContentItem{{Type: "text",
+		Text: fmt.Sprintf("frontApp.bundleId=%s name=%q pid=%d", fa.BundleID, fa.Name, fa.PID)}}}, nil
+}
+
+func (s *MCPServer) toolMacActivate(ctx context.Context, args json.RawMessage) (*ToolResult, error) {
+	var in struct {
+		BundleID string `json:"bundle_id"`
+	}
+	if err := json.Unmarshal(args, &in); err != nil {
+		return errToolResult(err), nil
+	}
+	if in.BundleID == "" {
+		return errToolResult(fmt.Errorf("bundle_id is required")), nil
+	}
+	body, _ := json.Marshal(macproto.ActivateRequest{BundleID: in.BundleID})
+	if _, err := s.helper.Call(ctx, macproto.MethodActivate, body); err != nil {
+		return errToolResult(err), nil
+	}
+	return &ToolResult{Content: []ContentItem{{Type: "text",
+		Text: fmt.Sprintf("activated %s", in.BundleID)}}}, nil
+}
+
+func (s *MCPServer) toolMacScreenshot(ctx context.Context) (*ToolResult, error) {
+	// Same payload as wechat.screenshot — no guard.
+	return s.toolScreenshot(ctx)
+}
+
+func (s *MCPServer) toolMacClick(ctx context.Context, args json.RawMessage) (*ToolResult, error) {
+	var in struct {
+		X, Y           float64
+		Button         string
+		Clicks         int
+		TargetBundleID string `json:"target_bundle_id"`
+	}
+	if len(args) > 0 {
+		_ = json.Unmarshal(args, &in)
+	}
+	if err := s.macTargetGuard(ctx, in.TargetBundleID); err != nil {
+		return errToolResult(err), nil
+	}
+	if in.Button == "" {
+		in.Button = "left"
+	}
+	if in.Clicks == 0 {
+		in.Clicks = 1
+	}
+	body, _ := json.Marshal(macproto.ClickRequest{
+		X: in.X, Y: in.Y, Button: in.Button, Clicks: in.Clicks,
+	})
+	if _, err := s.helper.Call(ctx, macproto.MethodClick, body); err != nil {
+		return errToolResult(err), nil
+	}
+	return &ToolResult{Content: []ContentItem{{Type: "text",
+		Text: fmt.Sprintf("clicked %s×%d at (%.1f, %.1f)", in.Button, in.Clicks, in.X, in.Y)}}}, nil
+}
+
+func (s *MCPServer) toolMacType(ctx context.Context, args json.RawMessage) (*ToolResult, error) {
+	var in struct {
+		Text           string
+		TargetBundleID string `json:"target_bundle_id"`
+	}
+	if err := json.Unmarshal(args, &in); err != nil {
+		return errToolResult(err), nil
+	}
+	if err := s.macTargetGuard(ctx, in.TargetBundleID); err != nil {
+		return errToolResult(err), nil
+	}
+	if isASCII(in.Text) {
+		body, _ := json.Marshal(macproto.TypeRequest{Text: in.Text})
+		if _, err := s.helper.Call(ctx, macproto.MethodType, body); err != nil {
+			return errToolResult(err), nil
+		}
+		return &ToolResult{Content: []ContentItem{{Type: "text",
+			Text: fmt.Sprintf("typed %d characters (CGEvent unicode)", len([]rune(in.Text)))}}}, nil
+	}
+	body, _ := json.Marshal(macproto.ClipboardPasteRequest{Text: in.Text})
+	if _, err := s.helper.Call(ctx, macproto.MethodClipboardPaste, body); err != nil {
+		return errToolResult(err), nil
+	}
+	return &ToolResult{Content: []ContentItem{{Type: "text",
+		Text: fmt.Sprintf("pasted %d characters (clipboard fallback for non-ASCII)", len([]rune(in.Text)))}}}, nil
+}
+
+func (s *MCPServer) toolMacKey(ctx context.Context, args json.RawMessage) (*ToolResult, error) {
+	var in struct {
+		Combo          string
+		TargetBundleID string `json:"target_bundle_id"`
+	}
+	if err := json.Unmarshal(args, &in); err != nil {
+		return errToolResult(err), nil
+	}
+	if err := s.macTargetGuard(ctx, in.TargetBundleID); err != nil {
+		return errToolResult(err), nil
+	}
+	body, _ := json.Marshal(macproto.KeyRequest{Combo: in.Combo})
+	if _, err := s.helper.Call(ctx, macproto.MethodKey, body); err != nil {
+		return errToolResult(err), nil
+	}
+	return &ToolResult{Content: []ContentItem{{Type: "text",
+		Text: fmt.Sprintf("sent key %q", in.Combo)}}}, nil
+}
+
+func (s *MCPServer) toolMacScroll(ctx context.Context, args json.RawMessage) (*ToolResult, error) {
+	var in struct {
+		X, Y, DX, DY   float64
+		TargetBundleID string `json:"target_bundle_id"`
+	}
+	if err := json.Unmarshal(args, &in); err != nil {
+		return errToolResult(err), nil
+	}
+	if err := s.macTargetGuard(ctx, in.TargetBundleID); err != nil {
+		return errToolResult(err), nil
+	}
+	body, _ := json.Marshal(macproto.ScrollRequest{X: in.X, Y: in.Y, DX: in.DX, DY: in.DY})
+	if _, err := s.helper.Call(ctx, macproto.MethodScroll, body); err != nil {
+		return errToolResult(err), nil
+	}
+	return &ToolResult{Content: []ContentItem{{Type: "text",
+		Text: fmt.Sprintf("scrolled (dx=%.1f dy=%.1f) at (%.1f, %.1f)", in.DX, in.DY, in.X, in.Y)}}}, nil
+}
+
+func (s *MCPServer) toolMacClipboardPaste(ctx context.Context, args json.RawMessage) (*ToolResult, error) {
+	var in struct {
+		Text           string
+		TargetBundleID string `json:"target_bundle_id"`
+	}
+	if err := json.Unmarshal(args, &in); err != nil {
+		return errToolResult(err), nil
+	}
+	if err := s.macTargetGuard(ctx, in.TargetBundleID); err != nil {
+		return errToolResult(err), nil
+	}
+	body, _ := json.Marshal(macproto.ClipboardPasteRequest{Text: in.Text})
+	if _, err := s.helper.Call(ctx, macproto.MethodClipboardPaste, body); err != nil {
+		return errToolResult(err), nil
+	}
+	return &ToolResult{Content: []ContentItem{{Type: "text",
+		Text: fmt.Sprintf("pasted %d characters", len([]rune(in.Text)))}}}, nil
 }
 
 func (s *MCPServer) toolEnsureForeground(ctx context.Context) (*ToolResult, error) {
