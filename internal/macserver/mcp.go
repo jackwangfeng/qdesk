@@ -163,6 +163,94 @@ func (s *MCPServer) tools() []ToolDef {
 				"required":   []string{"name"},
 			},
 		},
+
+		// ----- Generic mac.* surface — drive any macOS app, not just WeChat -----
+
+		{
+			Name:        "mac.front_app",
+			Description: "Return the bundle ID, name, and PID of the current foreground app. Use this to discover what's in front before screenshotting or sending input.",
+			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
+		},
+		{
+			Name:        "mac.activate",
+			Description: "Bring the given macOS app to the foreground. The app must already be running — this tool does not auto-launch. Common bundle IDs: com.apple.iphonesimulator (Simulator.app), com.apple.Safari, com.tencent.xinWeChat, com.apple.finder.",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"bundle_id": map[string]any{"type": "string"}},
+				"required":   []string{"bundle_id"},
+			},
+		},
+		{
+			Name:        "mac.screenshot",
+			Description: "Capture the full Mac screen as PNG. No foreground guard — the screenshot includes whatever apps are visible. Returns the image plus the bundle ID and name of the current foreground app.",
+			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
+		},
+		{
+			Name:        "mac.click",
+			Description: "Click at LOGICAL global screen coordinates. Optional target_bundle_id verifies that app is in front before posting; omit to skip the check (LLM is responsible for activating the right app first).",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"x":                map[string]any{"type": "number"},
+					"y":                map[string]any{"type": "number"},
+					"button":           map[string]any{"type": "string", "enum": []string{"left", "right", "middle"}, "default": "left"},
+					"clicks":           map[string]any{"type": "integer", "minimum": 1, "maximum": 3, "default": 1},
+					"target_bundle_id": map[string]any{"type": "string"},
+				},
+				"required": []string{"x", "y"},
+			},
+		},
+		{
+			Name:        "mac.type",
+			Description: "Type Unicode text at the current focus. Optional target_bundle_id verifies the right app is in front. Non-ASCII text automatically routes through the clipboard-paste fallback (some apps' IMEs drop CGEvent unicode events).",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"text":             map[string]any{"type": "string"},
+					"target_bundle_id": map[string]any{"type": "string"},
+				},
+				"required": []string{"text"},
+			},
+		},
+		{
+			Name:        "mac.key",
+			Description: "Send a key combo at the current focus, e.g. \"return\", \"escape\", \"cmd+v\", \"cmd+shift+t\". Optional target_bundle_id verifies the right app is in front.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"combo":            map[string]any{"type": "string"},
+					"target_bundle_id": map[string]any{"type": "string"},
+				},
+				"required": []string{"combo"},
+			},
+		},
+		{
+			Name:        "mac.scroll",
+			Description: "Wheel-scroll at LOGICAL screen point (x, y). Positive dy scrolls up. Optional target_bundle_id verifies the right app is in front.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"x":                map[string]any{"type": "number"},
+					"y":                map[string]any{"type": "number"},
+					"dy":               map[string]any{"type": "number"},
+					"dx":               map[string]any{"type": "number", "default": 0},
+					"target_bundle_id": map[string]any{"type": "string"},
+				},
+				"required": []string{"x", "y", "dy"},
+			},
+		},
+		{
+			Name:        "mac.clipboard_paste",
+			Description: "Set the system clipboard to `text`, post cmd+v at the focused app, wait briefly, then restore the original clipboard. Use this to deliver text that the focused app's IME would drop via mac.type. Optional target_bundle_id verifies the right app is in front.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"text":             map[string]any{"type": "string"},
+					"target_bundle_id": map[string]any{"type": "string"},
+				},
+				"required": []string{"text"},
+			},
+		},
 	}
 }
 
