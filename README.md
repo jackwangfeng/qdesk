@@ -64,6 +64,41 @@ require WeChat to be the foreground app, screenshots are full-screen
 (includes other apps' windows). No code signing — TCC may re-prompt
 after rebuild.
 
+### Remote mode (HTTP transport)
+
+Run `qdesk-mac` as an HTTP server so a client on another machine can
+drive your Mac's WeChat. Same MCP JSON-RPC dispatch, just over HTTP.
+
+```bash
+export QDESK_MAC_API_KEY=$(openssl rand -hex 32)
+qdesk-mac --listen 127.0.0.1:8765 --api-key "$QDESK_MAC_API_KEY"
+# In another shell or another machine (with --listen 0.0.0.0:8765 + reverse proxy):
+curl -X POST http://127.0.0.1:8765/mcp \
+  -H "Authorization: Bearer $QDESK_MAC_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+While running in HTTP mode, qdesk-mac forks `caffeinate -di` to keep the
+Mac awake and the display unlocked (suppress with `--no-caffeinate`).
+**The Mac must remain logged in and unlocked** — macOS Secure Event
+Input blocks all synthetic keyboard events from the lock screen, so
+nothing in qdesk-mac can unlock the screen for you.
+
+Endpoints:
+
+- `GET /health` — no auth, returns `{"ok": true}`. Liveness probe.
+- `POST /mcp` — bearer auth required. Body is one JSON-RPC request,
+  response is one JSON-RPC response.
+
+Hardening before exposing to the public internet:
+
+- Front with TLS (caddy / nginx). qdesk-mac speaks plain HTTP.
+- Use a strong `--api-key` (32+ random bytes). It's the only auth.
+- Bind to `127.0.0.1` and tunnel via SSH or Tailscale, OR bind to
+  `0.0.0.0` only behind a reverse proxy with ACLs. Don't expose the
+  raw port.
+
 ---
 
 ## Use cases

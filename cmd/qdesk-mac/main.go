@@ -24,9 +24,15 @@ func main() {
 	helperPath := flag.String("helper",
 		envOr("QDESK_MAC_HELPER", defaultHelperPath()),
 		"path to qdesk-mac-helper binary")
+	listen := flag.String("listen",
+		os.Getenv("QDESK_MAC_LISTEN"),
+		"HTTP listen address (e.g. 127.0.0.1:8765). If empty, run in stdio MCP mode.")
+	apiKey := flag.String("api-key",
+		os.Getenv("QDESK_MAC_API_KEY"),
+		"shared bearer token for HTTP mode (env QDESK_MAC_API_KEY). Required when --listen is set; HTTP mode refuses to start with an empty key.")
+	noCaffeinate := flag.Bool("no-caffeinate", false,
+		"HTTP mode only: do NOT spawn `caffeinate -di` to keep the Mac awake while serving")
 	flag.Parse()
-
-	logf("qdesk-mac starting; helper=%s", *helperPath)
 
 	ctx, cancel := signal.NotifyContext(context.Background(),
 		os.Interrupt, syscall.SIGTERM)
@@ -41,6 +47,24 @@ func main() {
 
 	srv := macserver.NewMCPServer(sup)
 
+	if *listen != "" {
+		logf("qdesk-mac starting in HTTP mode; helper=%s listen=%s api_key=%v",
+			*helperPath, *listen, *apiKey != "")
+		if err := runHTTP(ctx, srv, *listen, *apiKey, !*noCaffeinate); err != nil {
+			fmt.Fprintf(os.Stderr, "qdesk-mac: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	logf("qdesk-mac starting in stdio MCP mode; helper=%s", *helperPath)
+	runStdio(ctx, srv)
+}
+
+// runStdio implements the original MCP stdio loop: one JSON-RPC request per
+// line on stdin, one response per line on stdout. MCP convention requires
+// stdout to carry ONLY framed responses; logs go to stderr.
+func runStdio(ctx context.Context, srv *macserver.MCPServer) {
 	in := bufio.NewReader(os.Stdin)
 	out := bufio.NewWriter(os.Stdout)
 	defer out.Flush()
@@ -101,5 +125,5 @@ func logf(format string, args ...any) {
 	fmt.Fprintln(os.Stderr, "qdesk-mac: "+fmt.Sprintf(format, args...))
 }
 
-// runDoctor is implemented in doctor.go (Task 13).
+// runDoctor is implemented in doctor.go.
 func runDoctor() int { return runDoctorReal() }
