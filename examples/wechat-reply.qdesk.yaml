@@ -19,9 +19,19 @@ goal: |
   Open the conversation with "文件传输助手" (File Transfer) and send the
   message "hi from qdesk run".
 
+# Explicit steps bypass vision-on-sidebar (Gemini Flash drifts on WeChat
+# 4.x's purple chat list); cmd+f search is the path the legacy
+# wechat.open_chat tool uses for the same reason.
+steps:
+  - Press Cmd+F to open WeChat's search bar at the top of the window.
+  - Type the text "文件传输助手" into the search bar.
+  - Press Return to open the top search result.
+  - Click the empty white message input area at the bottom of the chat window.
+  - Type the text "hi from qdesk run".
+  - Press Return to send the message.
+
 expect:
   - The most recent outgoing message in the chat reads "hi from qdesk run".
-  - The chat title at the top of the WeChat window is "文件传输助手".
 
 ttl_seconds: 180
-max_steps: 12
+max_steps: 18

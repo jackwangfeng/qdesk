@@ -131,6 +131,14 @@ func TestMacDriverScreenshotDecodesBase64(t *testing.T) {
 	if string(got) != string(wantPNG) {
 		t.Errorf("PNG bytes round-tripped wrong: %x vs %x", got, wantPNG)
 	}
+	// Screenshot also re-activates: setup activate + screenshot's
+	// activate + screenshot itself = 3 calls.
+	if len(fake.gotTools) != 3 ||
+		fake.gotTools[0] != "mac.activate" ||
+		fake.gotTools[1] != "mac.activate" ||
+		fake.gotTools[2] != "mac.screenshot" {
+		t.Errorf("expected [activate, activate, screenshot]; got %v", fake.gotTools)
+	}
 }
 
 func TestMacDriverActionTranslation(t *testing.T) {
@@ -171,6 +179,12 @@ func TestMacDriverActionTranslation(t *testing.T) {
 					t.Errorf("combo=%v", a["combo"])
 				}
 			}},
+		{"key-meta-normalized", &protocol.Action{Type: protocol.ActionKey, Keys: []string{"meta", "f"}}, "mac.key",
+			func(t *testing.T, a map[string]any) {
+				if a["combo"] != "cmd+f" {
+					t.Errorf("meta should be normalized to cmd; combo=%v", a["combo"])
+				}
+			}},
 		{"scroll", &protocol.Action{Type: protocol.ActionScroll, X: 5, Y: 6, DY: 3}, "mac.scroll",
 			func(t *testing.T, a map[string]any) {
 				if a["dy"] != float64(3) {
@@ -185,10 +199,14 @@ func TestMacDriverActionTranslation(t *testing.T) {
 			if err := sess.Action(context.Background(), tc.action); err != nil {
 				t.Fatalf("Action: %v", err)
 			}
-			if len(fake.gotTools) != 1 || fake.gotTools[0] != tc.wantTool {
-				t.Fatalf("expected one call to %s, got %v", tc.wantTool, fake.gotTools)
+			// Each Action re-activates first, so we expect 2 calls:
+			// [mac.activate, <wantTool>].
+			if len(fake.gotTools) != 2 ||
+				fake.gotTools[0] != "mac.activate" ||
+				fake.gotTools[1] != tc.wantTool {
+				t.Fatalf("expected [mac.activate, %s]; got %v", tc.wantTool, fake.gotTools)
 			}
-			tc.assert(t, fake.gotArgs[0])
+			tc.assert(t, fake.gotArgs[1])
 		})
 	}
 }

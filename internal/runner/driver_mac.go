@@ -75,6 +75,13 @@ type macSession struct {
 }
 
 func (s *macSession) Screenshot(ctx context.Context) ([]byte, error) {
+	// Bring the target to foreground before snapping. The screenshot
+	// is full-screen, so the agent will see WHATEVER is in front —
+	// including iTerm2 if focus drifted. Re-activating each time
+	// keeps the agent's view consistent with the bundle it's driving.
+	if _, err := s.callTool(ctx, "mac.activate", map[string]any{"bundle_id": s.bundleID}); err != nil {
+		return nil, fmt.Errorf("re-activate %s: %w", s.bundleID, err)
+	}
 	res, err := s.callTool(ctx, "mac.screenshot", map[string]any{})
 	if err != nil {
 		return nil, err
@@ -92,6 +99,16 @@ func (s *macSession) Screenshot(ctx context.Context) ([]byte, error) {
 }
 
 func (s *macSession) Action(ctx context.Context, a *protocol.Action) error {
+	// Re-activate the target before every action that hits the GUI.
+	// Without this, a 5-15s vision call lets iTerm2 (or whatever was
+	// running qdesk-run) drift back to foreground; the per-action
+	// target_bundle_id guard then correctly refuses, and the test
+	// fails for the wrong reason. Wait is local-only and skips this.
+	if a.Type != protocol.ActionWait {
+		if _, err := s.callTool(ctx, "mac.activate", map[string]any{"bundle_id": s.bundleID}); err != nil {
+			return fmt.Errorf("re-activate %s: %w", s.bundleID, err)
+		}
+	}
 	switch a.Type {
 	case protocol.ActionClick:
 		args := map[string]any{
@@ -111,8 +128,11 @@ func (s *macSession) Action(ctx context.Context, a *protocol.Action) error {
 		return err
 	case protocol.ActionKey:
 		// protocol.Action.Keys carries ["ctrl","s"]; mac.key wants "ctrl+s".
+		// Normalize cross-platform aliases (LLMs trained on Linux/Win
+		// often emit "meta" / "command" / "option" / "win"; on Mac all
+		// four mean cmd or alt).
 		_, err := s.callTool(ctx, "mac.key", map[string]any{
-			"combo":            strings.Join(a.Keys, "+"),
+			"combo":            normalizeMacCombo(a.Keys),
 			"target_bundle_id": s.bundleID,
 		})
 		return err
@@ -141,6 +161,25 @@ func (s *macSession) Action(ctx context.Context, a *protocol.Action) error {
 }
 
 func (s *macSession) Close(_ context.Context) error { return nil }
+
+// normalizeMacCombo maps cross-platform modifier names to what
+// qdesk-mac-helper understands. The vision LLM is trained on a mix of
+// Linux/Windows keyboard literature and frequently emits "meta" or
+// "win" for what should be "cmd" on macOS; "option" instead of "alt".
+func normalizeMacCombo(keys []string) string {
+	out := make([]string, len(keys))
+	for i, k := range keys {
+		switch strings.ToLower(k) {
+		case "meta", "command", "win", "windows", "super":
+			out[i] = "cmd"
+		case "option":
+			out[i] = "alt"
+		default:
+			out[i] = strings.ToLower(k)
+		}
+	}
+	return strings.Join(out, "+")
+}
 
 // rpcResult is what mac.* tool calls return inside the JSON-RPC envelope.
 type rpcResult struct {
