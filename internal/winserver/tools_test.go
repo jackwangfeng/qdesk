@@ -3,6 +3,7 @@ package winserver
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -62,6 +63,34 @@ func TestScreenshotToolReturnsImageContent(t *testing.T) {
 	}
 	if !strings.Contains(res.Content[1].Text, "explorer.exe") || !strings.Contains(res.Content[1].Text, "1920x1080") {
 		t.Errorf("screenshot text missing exe or dims: %q", res.Content[1].Text)
+	}
+}
+
+// On a disconnected RDP session, GetForegroundWindow returns NULL and
+// FrontApp errors out. The screenshot must still come back; only the
+// annotation text degrades.
+func TestScreenshotSucceedsWhenFrontAppFails(t *testing.T) {
+	n := &FakeNative{
+		FrontAppFn: func() (FrontApp, error) {
+			return FrontApp{}, errors.New("no foreground window")
+		},
+		ScreenshotFn: func() (Screenshot, error) {
+			return Screenshot{PNGBase64: "iVBORw0KGgo=", Width: 800, Height: 600}, nil
+		},
+	}
+	srv := NewMCPServer(n)
+	res := callTool(t, srv, "windows.screenshot", map[string]any{})
+	if res.IsError {
+		t.Fatalf("screenshot must not error when only FrontApp failed: %+v", res)
+	}
+	if res.Content[0].Type != "image" || res.Content[0].Data != "iVBORw0KGgo=" {
+		t.Errorf("PNG must still be present: %+v", res.Content[0])
+	}
+	if !strings.Contains(res.Content[1].Text, "frontApp=unavailable") {
+		t.Errorf("annotation should report frontApp=unavailable; got %q", res.Content[1].Text)
+	}
+	if !strings.Contains(res.Content[1].Text, "800x600") {
+		t.Errorf("annotation should still include dims; got %q", res.Content[1].Text)
 	}
 }
 

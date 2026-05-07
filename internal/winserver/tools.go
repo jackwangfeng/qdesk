@@ -40,18 +40,23 @@ func (s *MCPServer) toolFrontApp(ctx context.Context) (*ToolResult, error) {
 }
 
 func (s *MCPServer) toolScreenshot(ctx context.Context) (*ToolResult, error) {
-	fa, err := s.native.FrontApp(ctx)
-	if err != nil {
-		return errToolResult(err), nil
-	}
+	// FrontApp here is just the annotation text — its failure (e.g. no
+	// active interactive desktop on a disconnected RDP session) must not
+	// gate the screenshot itself.
+	fa, faErr := s.native.FrontApp(ctx)
 	shot, err := s.native.Screenshot(ctx)
 	if err != nil {
 		return errToolResult(err), nil
 	}
+	annotation := fmt.Sprintf("size=%dx%d (physical pixels)", shot.Width, shot.Height)
+	if faErr == nil {
+		annotation = fmt.Sprintf("frontApp.exe=%s title=%q  %s", fa.Exe, fa.Title, annotation)
+	} else {
+		annotation = fmt.Sprintf("frontApp=unavailable (%v); %s", faErr, annotation)
+	}
 	return &ToolResult{Content: []ContentItem{
 		{Type: "image", MIMEType: "image/png", Data: shot.PNGBase64},
-		{Type: "text", Text: fmt.Sprintf("frontApp.exe=%s title=%q  size=%dx%d (physical pixels)",
-			fa.Exe, fa.Title, shot.Width, shot.Height)},
+		{Type: "text", Text: annotation},
 	}}, nil
 }
 
