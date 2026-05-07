@@ -187,12 +187,6 @@ func (s *MCPServer) tools() []ToolDef {
 	}
 }
 
-// callTool is a stub until Task 4 introduces real tool implementations.
-// All tool calls fail with "tool not implemented yet: <name>" for now.
-func (s *MCPServer) callTool(_ context.Context, name string, _ json.RawMessage) (*ToolResult, error) {
-	return nil, &notImplementedError{name: name}
+func (s *MCPServer) callTool(ctx context.Context, name string, args json.RawMessage) (*ToolResult, error) {
+	return s.callToolReal(ctx, name, args)
 }
-
-type notImplementedError struct{ name string }
-
-func (e *notImplementedError) Error() string { return "tool not implemented yet: " + e.name }
