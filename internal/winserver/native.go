@@ -19,15 +19,17 @@ type Native interface {
 }
 
 // FrontApp is what GetForegroundWindow + GetWindowThreadProcessId yield.
+// Exe is the basename, lowercased (e.g. "notepad.exe"); the expected_exe
+// guard in tools.go compares against it case-insensitively.
 type FrontApp struct {
 	HWND  uintptr `json:"hwnd"`
 	PID   uint32  `json:"pid"`
-	Exe   string  `json:"exe"`
+	Exe   string  `json:"exe"` // basename, lowercased ("notepad.exe")
 	Title string  `json:"title"`
 }
 
 // ActivateReq targets a window. Priority: HWND > Exe > TitleRegex.
-// At least one must be non-zero/empty.
+// At least one field must be set (non-zero HWND, or non-empty Exe / TitleRegex).
 type ActivateReq struct {
 	HWND       uintptr `json:"hwnd,omitempty"`
 	Exe        string  `json:"exe,omitempty"`
@@ -49,18 +51,19 @@ type Screenshot struct {
 	Height    int    `json:"height"`
 }
 
-// ClickReq. Coordinates are PHYSICAL pixels (the same coordinate
-// space Screenshot dimensions use under PerMonitorV2 DPI awareness).
+// ClickReq describes a synthetic mouse click. Coordinates are PHYSICAL
+// pixels — the same coordinate space Screenshot dimensions use under
+// PerMonitorV2 DPI awareness.
 type ClickReq struct {
 	X         int      `json:"x"`
 	Y         int      `json:"y"`
-	Button    string   `json:"button"`
-	Double    bool     `json:"double"`
-	Modifiers []string `json:"modifiers,omitempty"`
+	Button    string   `json:"button"`              // "left" | "right" | "middle"
+	Double    bool     `json:"double"`              // true = double-click
+	Modifiers []string `json:"modifiers,omitempty"` // "ctrl" "shift" "alt" "win"
 }
 
-// ScrollReq. dx/dy are wheel notches (positive dy = scroll up,
-// matching mac.scroll convention).
+// ScrollReq describes a wheel-scroll at a physical pixel point. dx/dy
+// are wheel notches (positive dy = scroll up, matching mac.scroll convention).
 type ScrollReq struct {
 	X  int `json:"x"`
 	Y  int `json:"y"`

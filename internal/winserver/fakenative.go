@@ -6,9 +6,10 @@ import (
 )
 
 // FakeNative is a programmable Native for tests. Each method
-// delegates to the corresponding Fn field; nil Fn returns a
-// "no handler" error, which most tests should treat as a bug
-// (it means a code path called a method tests forgot to wire up).
+// delegates to the corresponding Fn field; nil Fn returns
+// `errors.New("fake: <Method> not wired")`, which most tests should
+// treat as a bug — a code path called a method tests forgot to wire up.
+// (Grep that string back here when triaging a test failure.)
 type FakeNative struct {
 	FrontAppFn       func() (FrontApp, error)
 	ActivateFn       func(ActivateReq) (ActivateResp, error)
