@@ -9,17 +9,22 @@ import (
 	"time"
 
 	"github.com/jeffwang/qdesk/internal/llm"
-	"github.com/jeffwang/qdesk/pkg/client"
 	"github.com/jeffwang/qdesk/pkg/protocol"
 )
 
 // Options configures a Run.
 type Options struct {
 	// ControlURL is the qdesk-control base URL (e.g. http://localhost:8080).
+	// Used by the linux-chrome target.
 	ControlURL string
 
 	// APIKey is the bearer token for the control plane.
+	// Used by the linux-chrome target.
 	APIKey string
+
+	// MacEndpoint optionally overrides the spec.mac.endpoint field. Used
+	// by the mac-host target. Empty means "use whatever the yaml says".
+	MacEndpoint string
 
 	// Agent is the VisionAgent used for Act / Verify / Diagnose.
 	Agent llm.VisionAgent
@@ -37,11 +42,11 @@ func Run(ctx context.Context, spec *TestSpec, opts Options) (*Trace, error) {
 	if opts.MaxIterPerStep == 0 {
 		opts.MaxIterPerStep = 8
 	}
-	c := client.New(opts.ControlURL, opts.APIKey)
 
 	trace := &Trace{
 		TestName:  spec.Name,
 		TestPath:  spec.SourcePath,
+		Target:    spec.Target,
 		StartedAt: time.Now().UTC(),
 		Status:    StatusRunning,
 		LLM:       opts.Agent.Name(),
@@ -51,31 +56,25 @@ func Run(ctx context.Context, spec *TestSpec, opts Options) (*Trace, error) {
 		_ = SaveTrace(opts.OutDir, trace)
 	}()
 
-	// 1. Spin up sandbox session.
-	sess, err := c.CreateSession(ctx, &client.CreateSessionRequest{
-		Template:   spec.Template,
-		TTLSeconds: spec.TTLSeconds,
-		OpenURL:    spec.URL,
-	})
+	// 1. Pick driver, set up the target environment.
+	driver, err := pickDriver(spec, opts)
 	if err != nil {
 		trace.Status = StatusError
-		trace.Diagnosis = "create session: " + err.Error()
-		return trace, fmt.Errorf("create session: %w", err)
+		trace.Diagnosis = "driver: " + err.Error()
+		return trace, fmt.Errorf("driver: %w", err)
+	}
+	sess, err := driver.Setup(ctx, spec)
+	if err != nil {
+		trace.Status = StatusError
+		trace.Diagnosis = "setup: " + err.Error()
+		return trace, fmt.Errorf("setup: %w", err)
 	}
 	defer func() {
-		ctxStop, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		closeCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		_ = c.DeleteSession(ctxStop, sess.ID)
+		_ = sess.Close(closeCtx)
 	}()
-
-	// Give Chromium a moment to render the initial page after OpenURL.
-	if spec.URL != "" {
-		select {
-		case <-time.After(3 * time.Second):
-		case <-ctx.Done():
-			return trace, ctx.Err()
-		}
-	}
+	c := sess // alias for the rename below; rest of the loop uses c
 
 	// 2. For each step, run the agent loop.
 	totalTurns := 0
@@ -91,7 +90,7 @@ func Run(ctx context.Context, spec *TestSpec, opts Options) (*Trace, error) {
 		history := []llm.Turn{}
 		stepDone := false
 		for iter := 0; iter < opts.MaxIterPerStep && totalTurns < spec.MaxSteps; iter++ {
-			png, err := c.Screenshot(ctx, sess.ID)
+			png, err := c.Screenshot(ctx)
 			if err != nil {
 				ts.Failure = "screenshot: " + err.Error()
 				break
@@ -134,7 +133,7 @@ func Run(ctx context.Context, spec *TestSpec, opts Options) (*Trace, error) {
 				ts.Failure = "agent returned no action and not done"
 				break
 			}
-			if _, err := c.Action(ctx, sess.ID, dec.Action); err != nil {
+			if err := c.Action(ctx, dec.Action); err != nil {
 				ts.Failure = fmt.Sprintf("action %s: %v", dec.Action.Type, err)
 				break
 			}
@@ -170,7 +169,7 @@ func Run(ctx context.Context, spec *TestSpec, opts Options) (*Trace, error) {
 	// 3. If steps all succeeded, evaluate expectations.
 	if trace.Status == StatusRunning {
 		for _, exp := range spec.Expect {
-			png, err := c.Screenshot(ctx, sess.ID)
+			png, err := c.Screenshot(ctx)
 			if err != nil {
 				trace.Status = StatusError
 				trace.Diagnosis = "verify screenshot: " + err.Error()
@@ -201,7 +200,7 @@ func Run(ctx context.Context, spec *TestSpec, opts Options) (*Trace, error) {
 
 	// 4. On any failure, ask the LLM to diagnose.
 	if trace.Status == StatusFail {
-		png, err := c.Screenshot(ctx, sess.ID)
+		png, err := c.Screenshot(ctx)
 		if err == nil {
 			summary := summariseFailure(trace)
 			lastTurns := flattenTurns(trace.Steps)

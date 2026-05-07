@@ -13,15 +13,16 @@ import (
 // Trace is the persistent record of a test run. It can be replayed later
 // (Phase 0 only records; replay is Phase 1).
 type Trace struct {
-	TestName   string         `json:"test_name"`
-	TestPath   string         `json:"test_path"`
-	StartedAt  time.Time      `json:"started_at"`
-	FinishedAt time.Time      `json:"finished_at"`
-	Status     RunStatus      `json:"status"`
-	Steps      []TraceStep    `json:"steps"`
-	Verifies   []TraceVerify  `json:"verifies"`
-	Diagnosis  string         `json:"diagnosis,omitempty"`
-	LLM        string         `json:"llm"`
+	TestName   string        `json:"test_name"`
+	TestPath   string        `json:"test_path"`
+	Target     string        `json:"target,omitempty"`
+	StartedAt  time.Time     `json:"started_at"`
+	FinishedAt time.Time     `json:"finished_at"`
+	Status     RunStatus     `json:"status"`
+	Steps      []TraceStep   `json:"steps"`
+	Verifies   []TraceVerify `json:"verifies"`
+	Diagnosis  string        `json:"diagnosis,omitempty"`
+	LLM        string        `json:"llm"`
 }
 
 // TraceStep is the per-step record.
