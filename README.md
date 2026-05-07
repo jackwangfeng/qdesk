@@ -4,7 +4,7 @@
 
 Give any AI agent a clean Linux + Chromium environment over HTTP. Take screenshots, send clicks/keys, install apps, watch the screen. Self-hostable, MCP-native, ~$0.005 per agent action with a vision LLM.
 
-Use it for **testing, web automation, RPA, agent training, demos, scraping, computer-use evaluation** — anywhere an AI needs a real computer to drive.
+Use it for **RPA, agent training, demos, scraping, computer-use evaluation, exploratory smoke runs** — anywhere an AI needs a real computer to drive *and* you can tolerate occasional flake (vision-based UI agents are not deterministic). For green-on-green CI, prefer Playwright/Maestro on apps you can instrument; reach for qdesk when DOM/AX hooks aren't available.
 
 > 👉 **AI assistants (Claude Code, Cursor, Aider, …)** — qdesk ships an **[MCP server](.claude/mcp-install.md)** with 4 tools you can call directly. See [`SKILL.md`](./SKILL.md). Editing this codebase? Read **[`AGENTS.md`](./AGENTS.md)**.
 
@@ -229,17 +229,22 @@ Give Claude / Gemini / your own agent a real computer to drive. Open URLs,
 click, type, observe, decide. Same shape as Anthropic Computer Use, but
 **you control the computer** and **it's open source**.
 
-### 🧪 2. Visual UI testing (especially production builds + canvas)
-Describe a test in English; an AI agent verifies it. Works on **any rendered
-UI** — production builds, canvas-rendered apps (Figma, Excalidraw, custom
-Flutter painters), apps you can't instrument. Companion to dedicated tools
-like [Maestro](https://maestro.dev) (mobile dev iteration) and
-[flutter-skill](https://github.com/ai-dashboad/flutter-skill) (Flutter Dart-VM
-testing) which are faster on their home turf.
+### 🧪 2. Exploratory smoke runs on un-instrumentable UIs
+Describe a flow in English; an AI agent attempts it and reports back.
+**Best for**: production canvas-rendered apps (Figma, Excalidraw, custom
+Flutter painters), legacy desktop apps with no UI tree, "did this even
+load?" smoke checks. **Not for**: tight CI gates — vision-based agents
+mis-click ~5–20 % of the time depending on UI density and model
+(`gemini-2.5-pro` is more reliable than `flash` but ~10× the cost). For
+deterministic testing on apps you *can* instrument, use the right tool:
+[Playwright](https://playwright.dev) for web DOM,
+[Maestro](https://maestro.dev) for mobile,
+[flutter-skill](https://github.com/ai-dashboad/flutter-skill) for Flutter
+in dev, and reach for qdesk only when those don't apply.
 
 ```yaml
-# tests/login.qdesk.yaml
-name: "Landing → sign in"
+# tests/login.qdesk.yaml — smoke check, NOT a CI gate
+name: "Landing → sign in (smoke)"
 url: http://host.docker.internal:8888
 goal: Click "Get started" on the welcome page.
 expect:
@@ -251,16 +256,27 @@ $ qdesk run tests/login.qdesk.yaml
 📄 report: file:///.../report.html
 ```
 
+For high-friction targets (apps with dense localized UI, ambiguous
+search results, custom widgets) plain "screenshot + vision + click"
+is unreliable regardless of model. The path that's empirically working
+in this repo is **app-specific composite tools** that bypass vision
+on the hard step — see `wechat.open_chat` for the pattern (cmd+f →
+paste → return packaged as one tool, no LLM in the middle).
+
 ### 🌐 3. AI-driven web automation / scraping
 Site has anti-bot measures? Or just complex JS? Drive a real Chromium with
 an LLM choosing each action. Slower than Playwright but **handles cases
 DOM-based scrapers can't** (canvas, dynamic flows, captchas you have to
 visually decide on).
 
-### 🦾 4. RPA / driving apps that have no API
-Internal Linux desktop tools, legacy ERP web frontends, anything that's
-"only a UI." `apt install` it inside the sandbox image, then have the AI
-drive it.
+### 🦾 4. RPA / driving apps that have no API (the sweet spot)
+Internal Linux desktop tools, legacy ERP web frontends, intranet
+dashboards, anything that's "only a UI." This is where vision-based
+driving genuinely earns its complexity: the alternative is a human
+clicking through it, so a 90 % success rate with retry-on-fail is a
+huge win, not a weakness. `apt install` the app inside the sandbox
+image (or use `mac.*` / `windows.*` host modes for native apps), then
+have the AI drive it.
 
 ### 🎬 5. Demos / tutorials
 "Show me how to use Photoshop / Figma / our internal admin panel." AI
@@ -292,11 +308,14 @@ There's a healthy 2026 ecosystem. **qdesk doesn't try to win every cell.**
 | **Best at** | Self-hosted desktop sandbox | Managed browser sandbox | Cloud code+browser | Mobile testing | Flutter dev iteration | Web DOM CI |
 | **Worst at** | Speed (LLM screenshot loop) | Anything outside browser | Pure desktop apps | Canvas-only assertions | Production builds | Canvas content |
 
-**TL;DR:** qdesk is the "open-source self-hosted desktop sandbox" cell. If
-you want managed cloud and only browser → Browserbase. If you want
-mobile-specific testing → Maestro. If you want fast Flutter dev loops →
-flutter-skill. If you want a Linux computer your AI can drive, that you
-control end-to-end, that's open source — qdesk.
+**TL;DR:** qdesk is the "open-source self-hosted desktop sandbox" cell —
+plus host-mode adapters for the user's Mac (`qdesk-mac`) and Windows
+(`qdesk-win`) machines for cases where the target is the real desktop,
+not a fresh container. If you want managed cloud and only browser →
+Browserbase. If you want mobile-specific testing → Maestro. If you want
+fast Flutter dev loops → flutter-skill. If you want a real computer your
+AI can drive — open-source, self-hostable, MCP-native — and you accept
+that vision-based driving is best-effort rather than deterministic, qdesk.
 
 ---
 
