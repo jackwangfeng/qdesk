@@ -64,3 +64,53 @@ func TestScreenshotToolReturnsImageContent(t *testing.T) {
 		t.Errorf("screenshot text missing exe or dims: %q", res.Content[1].Text)
 	}
 }
+
+func TestActivateRequiresAtLeastOneTarget(t *testing.T) {
+	srv := NewMCPServer(&FakeNative{})
+	res := callTool(t, srv, "windows.activate", map[string]any{})
+	if !res.IsError {
+		t.Fatalf("expected IsError, got %+v", res)
+	}
+	if !strings.Contains(res.Content[0].Text, "hwnd, exe, or title_regex") {
+		t.Errorf("error message should mention required fields, got %q", res.Content[0].Text)
+	}
+}
+
+func TestActivatePassesArgsToNative(t *testing.T) {
+	var got ActivateReq
+	n := &FakeNative{ActivateFn: func(r ActivateReq) (ActivateResp, error) {
+		got = r
+		return ActivateResp{HWND: 0xBEEF, ActuallyForeground: true}, nil
+	}}
+	srv := NewMCPServer(n)
+	res := callTool(t, srv, "windows.activate", map[string]any{
+		"exe":         "notepad.exe",
+		"title_regex": "Untitled.*",
+	})
+	if res.IsError {
+		t.Fatalf("unexpected error: %+v", res)
+	}
+	if got.Exe != "notepad.exe" || got.TitleRegex != "Untitled.*" {
+		t.Errorf("native got wrong req: %+v", got)
+	}
+	if !strings.Contains(res.Content[0].Text, "actually_foreground=true") {
+		t.Errorf("text should report actually_foreground; got %q", res.Content[0].Text)
+	}
+	if !strings.Contains(res.Content[0].Text, "0xbeef") {
+		t.Errorf("text should report hwnd; got %q", res.Content[0].Text)
+	}
+}
+
+func TestActivateReportsForegroundFailureWithoutErroring(t *testing.T) {
+	n := &FakeNative{ActivateFn: func(r ActivateReq) (ActivateResp, error) {
+		return ActivateResp{HWND: 0x1234, ActuallyForeground: false}, nil
+	}}
+	srv := NewMCPServer(n)
+	res := callTool(t, srv, "windows.activate", map[string]any{"exe": "notepad.exe"})
+	if res.IsError {
+		t.Fatalf("activate should not IsError when only foreground steal failed; got %+v", res)
+	}
+	if !strings.Contains(res.Content[0].Text, "actually_foreground=false") {
+		t.Errorf("text should expose actually_foreground=false; got %q", res.Content[0].Text)
+	}
+}
