@@ -184,3 +184,63 @@ func TestScrollDelegates(t *testing.T) {
 		t.Errorf("scroll args not propagated: %+v", got)
 	}
 }
+
+func TestTypeASCIIUsesNativeType(t *testing.T) {
+	var typed string
+	pasted := false
+	n := &FakeNative{
+		TypeFn:           func(s string) error { typed = s; return nil },
+		ClipboardPasteFn: func(string) (ClipboardResp, error) { pasted = true; return ClipboardResp{}, nil },
+	}
+	srv := NewMCPServer(n)
+	res := callTool(t, srv, "windows.type", map[string]any{"text": "hello world 123"})
+	if res.IsError {
+		t.Fatalf("unexpected: %+v", res)
+	}
+	if typed != "hello world 123" {
+		t.Errorf("Type not called with right text: %q", typed)
+	}
+	if pasted {
+		t.Errorf("ClipboardPaste should NOT be called for ASCII text")
+	}
+	if !strings.Contains(res.Content[0].Text, "unicode") {
+		t.Errorf("result should mention path=unicode; got %q", res.Content[0].Text)
+	}
+}
+
+func TestTypeNonASCIIUsesClipboardPaste(t *testing.T) {
+	typed := false
+	var pasted string
+	n := &FakeNative{
+		TypeFn:           func(string) error { typed = true; return nil },
+		ClipboardPasteFn: func(s string) (ClipboardResp, error) { pasted = s; return ClipboardResp{Restored: true}, nil },
+	}
+	srv := NewMCPServer(n)
+	res := callTool(t, srv, "windows.type", map[string]any{"text": "你好 qdesk"})
+	if res.IsError {
+		t.Fatalf("unexpected: %+v", res)
+	}
+	if typed {
+		t.Errorf("Type should NOT be called for non-ASCII text")
+	}
+	if pasted != "你好 qdesk" {
+		t.Errorf("ClipboardPaste not called with right text: %q", pasted)
+	}
+	if !strings.Contains(res.Content[0].Text, "clipboard") {
+		t.Errorf("result should mention path=clipboard; got %q", res.Content[0].Text)
+	}
+}
+
+func TestTypeReportsClipboardRestoreFailure(t *testing.T) {
+	n := &FakeNative{
+		ClipboardPasteFn: func(string) (ClipboardResp, error) { return ClipboardResp{Restored: false}, nil },
+	}
+	srv := NewMCPServer(n)
+	res := callTool(t, srv, "windows.type", map[string]any{"text": "中文"})
+	if res.IsError {
+		t.Fatalf("type should not error when only restore failed")
+	}
+	if !strings.Contains(res.Content[0].Text, "clipboard_restored=false") {
+		t.Errorf("should surface restore failure; got %q", res.Content[0].Text)
+	}
+}

@@ -20,6 +20,10 @@ func (s *MCPServer) callToolReal(ctx context.Context, name string, args json.Raw
 		return s.toolKey(ctx, args)
 	case "windows.scroll":
 		return s.toolScroll(ctx, args)
+	case "windows.type":
+		return s.toolType(ctx, args)
+	case "windows.clipboard_paste":
+		return s.toolClipboardPaste(ctx, args)
 	default:
 		return errToolResult(fmt.Errorf("unknown tool: %s", name)), nil
 	}
@@ -143,6 +147,65 @@ func (s *MCPServer) toolScroll(ctx context.Context, args json.RawMessage) (*Tool
 	return &ToolResult{Content: []ContentItem{{Type: "text",
 		Text: fmt.Sprintf("scrolled (dx=%d dy=%d) at (%d, %d)", in.DX, in.DY, in.X, in.Y),
 	}}}, nil
+}
+
+func (s *MCPServer) toolType(ctx context.Context, args json.RawMessage) (*ToolResult, error) {
+	var in struct {
+		Text        string
+		ExpectedExe string `json:"expected_exe"`
+	}
+	if err := json.Unmarshal(args, &in); err != nil {
+		return errToolResult(err), nil
+	}
+	if err := requireForeground(ctx, s.native, in.ExpectedExe); err != nil {
+		return errToolResult(err), nil
+	}
+	if isASCII(in.Text) {
+		if err := s.native.Type(ctx, in.Text); err != nil {
+			return errToolResult(err), nil
+		}
+		return &ToolResult{Content: []ContentItem{{Type: "text",
+			Text: fmt.Sprintf("typed %d chars (path=unicode)", len([]rune(in.Text))),
+		}}}, nil
+	}
+	resp, err := s.native.ClipboardPaste(ctx, in.Text)
+	if err != nil {
+		return errToolResult(err), nil
+	}
+	return &ToolResult{Content: []ContentItem{{Type: "text",
+		Text: fmt.Sprintf("typed %d chars (path=clipboard) clipboard_restored=%t",
+			len([]rune(in.Text)), resp.Restored),
+	}}}, nil
+}
+
+func (s *MCPServer) toolClipboardPaste(ctx context.Context, args json.RawMessage) (*ToolResult, error) {
+	var in struct {
+		Text        string
+		ExpectedExe string `json:"expected_exe"`
+	}
+	if err := json.Unmarshal(args, &in); err != nil {
+		return errToolResult(err), nil
+	}
+	if err := requireForeground(ctx, s.native, in.ExpectedExe); err != nil {
+		return errToolResult(err), nil
+	}
+	resp, err := s.native.ClipboardPaste(ctx, in.Text)
+	if err != nil {
+		return errToolResult(err), nil
+	}
+	return &ToolResult{Content: []ContentItem{{Type: "text",
+		Text: fmt.Sprintf("pasted %d chars clipboard_restored=%t",
+			len([]rune(in.Text)), resp.Restored),
+	}}}, nil
+}
+
+func isASCII(s string) bool {
+	for _, r := range s {
+		if r > 0x7F {
+			return false
+		}
+	}
+	return true
 }
 
 func errToolResult(err error) *ToolResult {
