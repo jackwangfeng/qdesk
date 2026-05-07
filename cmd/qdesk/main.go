@@ -48,24 +48,32 @@ Usage:
   qdesk version
 
 Flags for "run":
-  --control     control plane URL (default: http://127.0.0.1:8080)
-  --api-key     bearer token; defaults to $QDESK_API_KEY or $QDESK_DEV_KEY
-  --llm         model: gemini-2.5-flash (default), gemini-2.5-pro
-  --gemini-key  gemini api key; defaults to $GEMINI_API_KEY
-  --out         output directory; default: ./qdesk-runs/<name>-<timestamp>
+  --control       control plane URL (linux-chrome target; default: http://127.0.0.1:8080)
+  --api-key       bearer token (linux-chrome); defaults to $QDESK_API_KEY or $QDESK_DEV_KEY
+  --mac-endpoint  qdesk-mac --listen URL override (mac-host target)
+  --llm           model: gemini-2.5-flash (default), gemini-2.5-pro
+  --gemini-key    gemini api key; defaults to $GEMINI_API_KEY
+  --out           output directory; default: ./qdesk-runs/<name>-<timestamp>
 
 Examples:
+  # Linux Docker (default):
   export GEMINI_API_KEY=...
   export QDESK_DEV_KEY=secret
   qdesk run tests/recompdaily-login.yaml
+
+  # Mac host (test reads spec.mac.api_key_env, e.g. QDESK_MAC_API_KEY):
+  export GEMINI_API_KEY=...
+  export QDESK_MAC_API_KEY=...
+  qdesk run tests/wechat-reply.qdesk.yaml
 
 `)
 }
 
 func cmdRun(args []string) int {
 	fs := flag.NewFlagSet("run", flag.ExitOnError)
-	control := fs.String("control", "http://127.0.0.1:8080", "control plane URL")
-	apiKey := fs.String("api-key", firstNonEmpty(os.Getenv("QDESK_API_KEY"), os.Getenv("QDESK_DEV_KEY")), "bearer token")
+	control := fs.String("control", "http://127.0.0.1:8080", "control plane URL (linux-chrome target)")
+	apiKey := fs.String("api-key", firstNonEmpty(os.Getenv("QDESK_API_KEY"), os.Getenv("QDESK_DEV_KEY")), "bearer token (linux-chrome target)")
+	macEndpoint := fs.String("mac-endpoint", "", "qdesk-mac --listen URL override (mac-host target)")
 	model := fs.String("llm", "gemini-2.5-flash", "LLM model")
 	geminiKey := fs.String("gemini-key", os.Getenv("GEMINI_API_KEY"), "Gemini API key")
 	outDir := fs.String("out", "", "output directory")
@@ -131,6 +139,7 @@ func cmdRun(args []string) int {
 	trace, err := runner.Run(ctx, spec, runner.Options{
 		ControlURL:     *control,
 		APIKey:         *apiKey,
+		MacEndpoint:    *macEndpoint,
 		Agent:          agent,
 		OutDir:         *outDir,
 		MaxIterPerStep: *maxIter,

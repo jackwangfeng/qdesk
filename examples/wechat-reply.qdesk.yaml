@@ -1,0 +1,27 @@
+name: "Send a WeChat message via qdesk run"
+
+# This is the canonical "yaml-driven test against a Mac host" example.
+# Requires qdesk-mac --listen running locally. See README "Mac host mode".
+#
+# Run:
+#   export GEMINI_API_KEY=...
+#   export QDESK_MAC_API_KEY=$(cat ~/.qdesk-mac-key)
+#   qdesk run examples/wechat-reply.qdesk.yaml
+
+target: mac-host
+
+mac:
+  endpoint: http://127.0.0.1:8765
+  api_key_env: QDESK_MAC_API_KEY
+  bundle_id: com.tencent.xinWeChat
+
+goal: |
+  Open the conversation with "文件传输助手" (File Transfer) and send the
+  message "hi from qdesk run".
+
+expect:
+  - The most recent outgoing message in the chat reads "hi from qdesk run".
+  - The chat title at the top of the WeChat window is "文件传输助手".
+
+ttl_seconds: 180
+max_steps: 12
