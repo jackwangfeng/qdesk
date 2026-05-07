@@ -130,6 +130,83 @@ the headers.
 
 ---
 
+## Windows host mode (alpha) — drive a Windows machine over HTTP
+
+A single Go binary, `qdesk-win.exe`, exposes the same shape as
+`qdesk-mac --listen` for a Windows host. **No sidecar** — Win32 syscalls
+happen directly in Go, so deploying is just one file.
+
+```bash
+# Cross-compile from your dev box
+make win-build
+
+# Deploy to a Windows host over SSH (OpenSSH server enabled)
+QDESK_WIN_HOST=Administrator@your-windows-host ./scripts/install-win.sh
+
+# Open inbound port 8765 in Windows Defender Firewall (one-time)
+ssh "$QDESK_WIN_HOST" 'powershell New-NetFirewallRule -DisplayName qdesk-win -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8765'
+
+# Launch qdesk-win in the user's INTERACTIVE session — see "session
+# isolation" below for why this isn't just `Start-Process`.
+KEY=$(openssl rand -hex 32)
+ssh "$QDESK_WIN_HOST" "schtasks /create /TN qdesk-win-runner /TR \"C:\\Users\\Administrator\\qdesk-win.exe --listen 0.0.0.0:8765 --api-key $KEY\" /SC ONCE /ST 23:59 /RL HIGHEST /F /RU Administrator /IT"
+ssh "$QDESK_WIN_HOST" "schtasks /run /TN qdesk-win-runner"
+```
+
+Tools live under `windows.*`: `front_app`, `activate`, `screenshot`,
+`click`, `type`, `key`, `scroll`, `clipboard_paste`. Each action accepts
+an optional `expected_exe` guard (basename, case-insensitive) that
+refuses the call if a different exe is in front. `windows.type`
+auto-routes non-ASCII text through the clipboard fallback (mirrors the
+macOS WeChat 4.x finding that some apps' input controls drop synthetic
+unicode events).
+
+```bash
+curl -X POST http://your-windows-host:8765/mcp \
+  -H "Authorization: Bearer $KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+### Windows session isolation (must read)
+
+Windows Server (and locked Windows desktops) isolate processes by
+**logon session**. SSH into a Windows Server lands in **Session 0**
+(services), which has **no desktop** — `GetForegroundWindow` returns
+NULL, `BitBlt` fails, GUI apps started there are invisible. The qdesk
+GUI tools require an **active interactive logon**: a connected RDP
+session or a physical-console login. Disconnected RDP sessions count
+as logged in but have no display device, so screenshots and
+`SetForegroundWindow` still fail there.
+
+That's why the launch step uses `schtasks /IT` — it routes the
+process into the user's interactive session. **Keep an RDP session
+connected** while qdesk-win serves traffic. If you need full
+unattended operation, use a physical-console autologon with the
+screensaver/lock disabled, or look at v1.x service-mode on the
+roadmap.
+
+### v1 limitations
+
+- **Primary monitor only.** Multi-monitor support is v1.x.
+- **No UIA / accessibility tree.** Per the design doc, the v1
+  approach is screenshot + coordinate input; UIA is deferred and
+  likely won't help apps that paint via DirectX/Skia (Electron,
+  Office, Slack).
+- **`actually_foreground` may be `false`.** Windows refuses
+  `SetForegroundWindow` from non-foreground processes; the tool
+  reports honestly and the caller decides whether to retry.
+- **No service install / autostart in v1** (the schtasks recipe above
+  is a manual trigger, not a service).
+- **No code signing.** SmartScreen may warn the first time the .exe
+  runs; click "More info → Run anyway".
+
+See `docs/superpowers/specs/2026-05-07-windows-host-mode-design.md`
+for the full design and `docs/superpowers/plans/2026-05-07-windows-host-mode.md`
+for the implementation plan.
+
+---
+
 ## Use cases
 
 qdesk gives you a **primitive**: an AI-controllable Linux desktop. What you

@@ -143,3 +143,15 @@ mac-build: ## Build qdesk-mac and qdesk-mac-helper for macOS.
 	go build -o bin/qdesk-mac ./cmd/qdesk-mac
 	cd cmd/qdesk-mac-helper && swift build -c release
 	cp cmd/qdesk-mac-helper/.build/release/Helper bin/qdesk-mac-helper
+
+QDESK_WIN_HOST ?= Administrator@192.168.0.127
+
+.PHONY: win-build win-deploy
+win-build: ## Cross-compile qdesk-win.exe (windows/amd64).
+	@mkdir -p bin
+	GOOS=windows GOARCH=amd64 go build -o bin/qdesk-win.exe ./cmd/qdesk-win
+
+win-deploy: win-build ## Build and scp qdesk-win.exe to $(QDESK_WIN_HOST).
+	scp bin/qdesk-win.exe $(QDESK_WIN_HOST):qdesk-win.exe
+	@echo "Deployed to $(QDESK_WIN_HOST). Start with:"
+	@echo "  ssh $(QDESK_WIN_HOST) './qdesk-win.exe --listen 0.0.0.0:8765 --api-key YOURKEY'"
