@@ -17,16 +17,15 @@ import (
 var (
 	gdi32 = windows.NewLazySystemDLL("gdi32.dll")
 
-	procGetDC                  = user32.NewProc("GetDC")
-	procReleaseDC              = user32.NewProc("ReleaseDC")
-	procGetSystemMetrics       = user32.NewProc("GetSystemMetrics")
-	procCreateCompatibleDC     = gdi32.NewProc("CreateCompatibleDC")
-	procCreateCompatibleBitmap = gdi32.NewProc("CreateCompatibleBitmap")
-	procSelectObject           = gdi32.NewProc("SelectObject")
-	procBitBlt                 = gdi32.NewProc("BitBlt")
-	procDeleteObject           = gdi32.NewProc("DeleteObject")
-	procDeleteDC               = gdi32.NewProc("DeleteDC")
-	procGetDIBits              = gdi32.NewProc("GetDIBits")
+	procGetDC              = user32.NewProc("GetDC")
+	procReleaseDC          = user32.NewProc("ReleaseDC")
+	procGetSystemMetrics   = user32.NewProc("GetSystemMetrics")
+	procCreateCompatibleDC = gdi32.NewProc("CreateCompatibleDC")
+	procCreateDIBSection   = gdi32.NewProc("CreateDIBSection")
+	procSelectObject       = gdi32.NewProc("SelectObject")
+	procBitBlt             = gdi32.NewProc("BitBlt")
+	procDeleteObject       = gdi32.NewProc("DeleteObject")
+	procDeleteDC           = gdi32.NewProc("DeleteDC")
 )
 
 const (
@@ -75,9 +74,24 @@ func screenshot() (winserver.Screenshot, error) {
 	}
 	defer procDeleteDC.Call(memDC)
 
-	bmp, _, _ := procCreateCompatibleBitmap.Call(srcDC, w, h)
-	if bmp == 0 {
-		return winserver.Screenshot{}, fmt.Errorf("CreateCompatibleBitmap failed")
+	// CreateDIBSection gives us a bitmap whose pixel buffer we can
+	// access directly via `bits` — no GetDIBits step. BitBlt populates
+	// the buffer in-place. Top-down DIB (negative height) so memory
+	// order matches image.RGBA expectations.
+	bi := bitmapInfo{Header: bitmapInfoHeader{
+		Size:        uint32(unsafe.Sizeof(bitmapInfoHeader{})),
+		Width:       int32(w),
+		Height:      -int32(h),
+		Planes:      1,
+		BitCount:    32,
+		Compression: biRGB,
+	}}
+	var bits unsafe.Pointer
+	bmp, _, lastErr := procCreateDIBSection.Call(srcDC,
+		uintptr(unsafe.Pointer(&bi)), dibRGB,
+		uintptr(unsafe.Pointer(&bits)), 0, 0)
+	if bmp == 0 || bits == nil {
+		return winserver.Screenshot{}, fmt.Errorf("CreateDIBSection failed (lastErr=%v)", lastErr)
 	}
 	defer procDeleteObject.Call(bmp)
 
@@ -87,22 +101,13 @@ func screenshot() (winserver.Screenshot, error) {
 		return winserver.Screenshot{}, fmt.Errorf("BitBlt failed")
 	}
 
+	// Copy pixels out of the DIB section before we DeleteObject it.
+	// The DIB section memory belongs to the bitmap; once deleted it's
+	// gone. unsafe.Slice gives us a Go-managed view of len pixels*4.
 	pixelCount := int(w * h)
+	src := unsafe.Slice((*byte)(bits), pixelCount*4)
 	pixels := make([]byte, pixelCount*4)
-	bi := bitmapInfo{Header: bitmapInfoHeader{
-		Size:        uint32(unsafe.Sizeof(bitmapInfoHeader{})),
-		Width:       int32(w),
-		Height:      -int32(h), // negative = top-down
-		Planes:      1,
-		BitCount:    32,
-		Compression: biRGB,
-	}}
-	gr, _, _ := procGetDIBits.Call(memDC, bmp, 0, h,
-		uintptr(unsafe.Pointer(&pixels[0])),
-		uintptr(unsafe.Pointer(&bi)), dibRGB)
-	if gr == 0 {
-		return winserver.Screenshot{}, fmt.Errorf("GetDIBits failed")
-	}
+	copy(pixels, src)
 
 	// BGRA → RGBA in place.
 	for i := 0; i < len(pixels); i += 4 {
