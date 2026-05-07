@@ -168,12 +168,12 @@ func (s *MCPServer) tools() []ToolDef {
 
 		{
 			Name:        "mac.front_app",
-			Description: "Return the bundle ID, name, and PID of the current foreground app. Use this to discover what's in front before screenshotting or sending input.",
+			Description: "Return the bundle ID, name, and PID of the current foreground app. Cheap. Call when you're not sure what's in front before screenshotting or sending input.",
 			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
 		},
 		{
 			Name:        "mac.activate",
-			Description: "Bring the given macOS app to the foreground. The app must already be running — this tool does not auto-launch. Common bundle IDs: com.apple.iphonesimulator (Simulator.app), com.apple.Safari, com.tencent.xinWeChat, com.apple.finder.",
+			Description: "Bring the given macOS app to the foreground by bundle ID. Does NOT launch — target must already be running. Common bundle IDs: com.apple.Safari, com.apple.finder, com.tencent.xinWeChat, com.apple.iphonesimulator (Simulator.app).",
 			InputSchema: map[string]any{
 				"type":       "object",
 				"properties": map[string]any{"bundle_id": map[string]any{"type": "string"}},
@@ -182,12 +182,12 @@ func (s *MCPServer) tools() []ToolDef {
 		},
 		{
 			Name:        "mac.screenshot",
-			Description: "Capture the full Mac screen as PNG. No foreground guard — the screenshot includes whatever apps are visible. Returns the image plus the bundle ID and name of the current foreground app.",
+			Description: "Capture the full Mac screen as PNG. Coordinates are LOGICAL points (Retina-aware) — match the dims you see when sending click/scroll. Always safe to call (no guard). Annotation includes the foreground app's bundle ID and name. Includes whatever apps are visible — the agent sees the user's full desktop.",
 			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
 		},
 		{
 			Name:        "mac.click",
-			Description: "Click at LOGICAL global screen coordinates. Optional target_bundle_id verifies that app is in front before posting; omit to skip the check (LLM is responsible for activating the right app first).",
+			Description: "Click at LOGICAL global screen coordinates — same coord space as mac.screenshot dims. Pass target_bundle_id to refuse the click if a different app is in front (recommended after every activate, prevents stray input on focus loss).",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -202,7 +202,7 @@ func (s *MCPServer) tools() []ToolDef {
 		},
 		{
 			Name:        "mac.type",
-			Description: "Type Unicode text at the current focus. Optional target_bundle_id verifies the right app is in front. Non-ASCII text automatically routes through the clipboard-paste fallback (some apps' IMEs drop CGEvent unicode events).",
+			Description: "Type Unicode text at the current focus. ASCII-only → CGEvent unicode (fast, no side effects). Non-ASCII (Chinese, emoji, em-dash, smart quotes, …) → auto-routes through clipboard + cmd+v with backup/restore (some IMEs drop CGEvent unicode — known to fail in WeChat 4.x). Pass target_bundle_id to refuse if a different app is in front.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{

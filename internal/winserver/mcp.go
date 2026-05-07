@@ -97,12 +97,12 @@ func (s *MCPServer) tools() []ToolDef {
 	return []ToolDef{
 		{
 			Name:        "windows.front_app",
-			Description: "Return HWND, PID, exe basename and window title of the current foreground window. Use to discover what's in front before screenshotting or sending input.",
+			Description: "Return HWND, PID, exe basename, and window title of the current foreground window. Cheap (~5ms). Call when you're not sure what's in front before screenshotting or sending input.",
 			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
 		},
 		{
 			Name:        "windows.activate",
-			Description: "Bring a window to the foreground. Provide hwnd, exe (basename like \"notepad.exe\"), or title_regex. Priority: hwnd > exe > title_regex. Returns actually_foreground=false if Windows refused the focus change (caller must not assume success).",
+			Description: "Bring a window to the foreground by hwnd, exe basename (e.g. \"notepad.exe\"), or title_regex (priority: hwnd > exe > title_regex). Returns actually_foreground — Windows can refuse focus steal from a non-foreground process; if false, retry once or fall back to clicking the taskbar entry. Does NOT launch apps; target must already be running.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -114,12 +114,12 @@ func (s *MCPServer) tools() []ToolDef {
 		},
 		{
 			Name:        "windows.screenshot",
-			Description: "Capture the primary monitor as PNG (physical pixels). No foreground guard. Returns the image plus the foreground exe + title.",
+			Description: "Capture the primary monitor as PNG. Coordinates are PHYSICAL pixels under PerMonitorV2 DPI awareness — match the dims you see when sending click/scroll. Always safe to call (no guard). Annotation includes the foreground exe + title (or 'frontApp=unavailable' on disconnected RDP sessions).",
 			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
 		},
 		{
 			Name:        "windows.click",
-			Description: "Click at PHYSICAL pixel coordinates. Optional expected_exe verifies that exe is in front before posting; omit to skip the check.",
+			Description: "Click at PHYSICAL pixel coordinates — same coord space as windows.screenshot dims. Pass expected_exe to refuse the click if a different app is in front (recommended after every activate, prevents typing into the wrong app on focus loss).",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -135,7 +135,7 @@ func (s *MCPServer) tools() []ToolDef {
 		},
 		{
 			Name:        "windows.type",
-			Description: "Type Unicode text at the current focus. ASCII-only text uses SendInput KEYEVENTF_UNICODE; non-ASCII auto-routes through the clipboard fallback (some old Win32 controls drop unicode events). Optional expected_exe verifies the right exe is in front.",
+			Description: "Type Unicode text at the current focus. ASCII-only text → SendInput KEYEVENTF_UNICODE (fast, no side effects). Non-ASCII (Chinese, emoji, em-dash, smart quotes, …) → auto-routes through clipboard + ctrl+v with backup/restore (some Win32 controls drop synthetic unicode). Result text reports path=unicode|clipboard. Pass expected_exe to refuse if a different app is in front.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{

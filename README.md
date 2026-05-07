@@ -207,6 +207,18 @@ for the implementation plan.
 
 ---
 
+## For the LLM driving these tools
+
+Both Mac and Windows host-mode MCP servers expose 8 mirror-image tools
+(`{platform}.front_app`, `activate`, `screenshot`, `click`, `type`,
+`key`, `scroll`, `clipboard_paste`). If you're an AI agent picking
+which tool to call, read **[`docs/agents/host-mode-tools.md`](./docs/agents/host-mode-tools.md)**
+once — it covers coordinate systems (Mac=logical points, Windows=physical
+pixels), the foreground-guard pattern, ASCII-vs-clipboard auto-routing,
+and the canonical screenshot-→-vision-→-action loop with cost figures.
+
+---
+
 ## Use cases
 
 qdesk gives you a **primitive**: an AI-controllable Linux desktop. What you
