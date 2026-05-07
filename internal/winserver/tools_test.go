@@ -114,3 +114,73 @@ func TestActivateReportsForegroundFailureWithoutErroring(t *testing.T) {
 		t.Errorf("text should expose actually_foreground=false; got %q", res.Content[0].Text)
 	}
 }
+
+func TestClickGuardBlocksOnMismatch(t *testing.T) {
+	called := false
+	n := &FakeNative{
+		FrontAppFn: func() (FrontApp, error) { return FrontApp{Exe: "explorer.exe"}, nil },
+		ClickFn:    func(ClickReq) error { called = true; return nil },
+	}
+	srv := NewMCPServer(n)
+	res := callTool(t, srv, "windows.click", map[string]any{
+		"x": 100, "y": 200, "expected_exe": "notepad.exe",
+	})
+	if !res.IsError {
+		t.Fatalf("expected IsError on guard mismatch")
+	}
+	if called {
+		t.Errorf("Click should NOT be called when guard fails")
+	}
+}
+
+func TestClickPassesArgsThrough(t *testing.T) {
+	var got ClickReq
+	n := &FakeNative{ClickFn: func(r ClickReq) error { got = r; return nil }}
+	srv := NewMCPServer(n)
+	res := callTool(t, srv, "windows.click", map[string]any{
+		"x": 100, "y": 200, "button": "right", "double": true,
+		"modifiers": []string{"ctrl", "shift"},
+	})
+	if res.IsError {
+		t.Fatalf("unexpected error: %+v", res)
+	}
+	if got.X != 100 || got.Y != 200 || got.Button != "right" || !got.Double {
+		t.Errorf("native got wrong req: %+v", got)
+	}
+	if len(got.Modifiers) != 2 {
+		t.Errorf("modifiers not propagated: %v", got.Modifiers)
+	}
+}
+
+func TestClickDefaultButtonIsLeft(t *testing.T) {
+	var got ClickReq
+	n := &FakeNative{ClickFn: func(r ClickReq) error { got = r; return nil }}
+	srv := NewMCPServer(n)
+	callTool(t, srv, "windows.click", map[string]any{"x": 0, "y": 0})
+	if got.Button != "left" {
+		t.Errorf("default button should be left; got %q", got.Button)
+	}
+}
+
+func TestKeyDelegatesCombo(t *testing.T) {
+	var got string
+	n := &FakeNative{KeyFn: func(c string) error { got = c; return nil }}
+	srv := NewMCPServer(n)
+	res := callTool(t, srv, "windows.key", map[string]any{"combo": "ctrl+f"})
+	if res.IsError {
+		t.Fatalf("unexpected error: %+v", res)
+	}
+	if got != "ctrl+f" {
+		t.Errorf("native got combo=%q want ctrl+f", got)
+	}
+}
+
+func TestScrollDelegates(t *testing.T) {
+	var got ScrollReq
+	n := &FakeNative{ScrollFn: func(r ScrollReq) error { got = r; return nil }}
+	srv := NewMCPServer(n)
+	callTool(t, srv, "windows.scroll", map[string]any{"x": 50, "y": 60, "dy": 3, "dx": 0})
+	if got.X != 50 || got.Y != 60 || got.DY != 3 {
+		t.Errorf("scroll args not propagated: %+v", got)
+	}
+}

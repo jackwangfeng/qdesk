@@ -14,6 +14,12 @@ func (s *MCPServer) callToolReal(ctx context.Context, name string, args json.Raw
 		return s.toolFrontApp(ctx)
 	case "windows.screenshot":
 		return s.toolScreenshot(ctx)
+	case "windows.click":
+		return s.toolClick(ctx, args)
+	case "windows.key":
+		return s.toolKey(ctx, args)
+	case "windows.scroll":
+		return s.toolScroll(ctx, args)
 	default:
 		return errToolResult(fmt.Errorf("unknown tool: %s", name)), nil
 	}
@@ -65,6 +71,77 @@ func (s *MCPServer) toolActivate(ctx context.Context, args json.RawMessage) (*To
 	}
 	return &ToolResult{Content: []ContentItem{{Type: "text",
 		Text: fmt.Sprintf("activated hwnd=0x%x actually_foreground=%t", resp.HWND, resp.ActuallyForeground),
+	}}}, nil
+}
+
+func (s *MCPServer) toolClick(ctx context.Context, args json.RawMessage) (*ToolResult, error) {
+	var in struct {
+		X, Y        int
+		Button      string
+		Double      bool
+		Modifiers   []string
+		ExpectedExe string `json:"expected_exe"`
+	}
+	if len(args) > 0 {
+		if err := json.Unmarshal(args, &in); err != nil {
+			return errToolResult(err), nil
+		}
+	}
+	if err := requireForeground(ctx, s.native, in.ExpectedExe); err != nil {
+		return errToolResult(err), nil
+	}
+	if in.Button == "" {
+		in.Button = "left"
+	}
+	if err := s.native.Click(ctx, ClickReq{
+		X: in.X, Y: in.Y, Button: in.Button, Double: in.Double, Modifiers: in.Modifiers,
+	}); err != nil {
+		return errToolResult(err), nil
+	}
+	dbl := ""
+	if in.Double {
+		dbl = " (double)"
+	}
+	return &ToolResult{Content: []ContentItem{{Type: "text",
+		Text: fmt.Sprintf("clicked %s%s at (%d, %d)", in.Button, dbl, in.X, in.Y),
+	}}}, nil
+}
+
+func (s *MCPServer) toolKey(ctx context.Context, args json.RawMessage) (*ToolResult, error) {
+	var in struct {
+		Combo       string
+		ExpectedExe string `json:"expected_exe"`
+	}
+	if err := json.Unmarshal(args, &in); err != nil {
+		return errToolResult(err), nil
+	}
+	if err := requireForeground(ctx, s.native, in.ExpectedExe); err != nil {
+		return errToolResult(err), nil
+	}
+	if err := s.native.Key(ctx, in.Combo); err != nil {
+		return errToolResult(err), nil
+	}
+	return &ToolResult{Content: []ContentItem{{Type: "text",
+		Text: fmt.Sprintf("sent key %q", in.Combo),
+	}}}, nil
+}
+
+func (s *MCPServer) toolScroll(ctx context.Context, args json.RawMessage) (*ToolResult, error) {
+	var in struct {
+		X, Y, DX, DY int
+		ExpectedExe  string `json:"expected_exe"`
+	}
+	if err := json.Unmarshal(args, &in); err != nil {
+		return errToolResult(err), nil
+	}
+	if err := requireForeground(ctx, s.native, in.ExpectedExe); err != nil {
+		return errToolResult(err), nil
+	}
+	if err := s.native.Scroll(ctx, ScrollReq{X: in.X, Y: in.Y, DX: in.DX, DY: in.DY}); err != nil {
+		return errToolResult(err), nil
+	}
+	return &ToolResult{Content: []ContentItem{{Type: "text",
+		Text: fmt.Sprintf("scrolled (dx=%d dy=%d) at (%d, %d)", in.DX, in.DY, in.X, in.Y),
 	}}}, nil
 }
 
